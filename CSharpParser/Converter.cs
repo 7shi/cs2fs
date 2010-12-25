@@ -348,6 +348,12 @@ namespace CSharpParser
                         case "continue":
                         case "break":
                             throw Abort("not supported");
+                        case "throw":
+                            Debug.Write(indent);
+                            Debug.Write("raise <| ");
+                            ReadExpr();
+                            Debug.WriteLine();
+                            break;
                         default:
                             ReadSentence();
                             break;
@@ -368,40 +374,46 @@ namespace CSharpParser
         {
             while (cur.Text != ";" && cur.Text != ")")
             {
-                if (cur.Text == "(")
+                var t = cur.Text;
+                if (t == "(")
                 {
-                    Debug.Write("(");
                     MoveNext();
+                    Debug.Write("(");
                     ReadExpr();
                     Debug.Write(")");
                 }
-                else if (cur.Text == ",")
+                else if (t == ",")
                 {
+                    MoveNext();
                     Debug.Write(", ");
-                    MoveNext();
                 }
-                else if (cur.Text == "." || cur.Type != TokenType.Operator)
+                else if (t == "new")
                 {
-                    Debug.Write("{0}", cur.Text);
                     MoveNext();
+                    Debug.Write("new ");
                 }
-                else if (cur.Text == "!")
+                else if (t == "." || cur.Type != TokenType.Operator)
                 {
+                    MoveNext();
+                    Debug.Write("{0}", t);
+                }
+                else if (t == "!")
+                {
+                    MoveNext();
                     Debug.Write("not ");
-                    MoveNext();
                 }
-                else if (cur.Text == "~")
+                else if (t == "~")
                 {
-                    Debug.Write("~~~");
                     MoveNext();
+                    Debug.Write("~~~");
                 }
                 else
                 {
-                    if (cur.Text == "++" || cur.Text == "--"
-                        || (cur.Text.Length > 1 && cur.Text[cur.Text.Length - 1] == '='))
+                    if (t == "++" || t == "--"
+                        || (t.Length > 1 && t[t.Length - 1] == '='))
                         throw Abort("not supported");
-                    Debug.Write(" " + ConvOp(cur.Text) + " ");
                     MoveNext();
+                    Debug.Write(" " + ConvOp(t) + " ");
                 }
             }
             MoveNext();
@@ -530,18 +542,26 @@ namespace CSharpParser
                 Debug.WriteLine();
                 var bak = indent;
                 indent += "    ";
-                while (cur.Text != "break" && cur.Text != "return")
+                while (cur.Text != "break" && cur.Text != "return" && cur.Text != "throw")
                     ReadSentence();
-                if (cur.Text == "break")
+                if (cur.Text == "return")
                 {
                     MoveNext();
-                    if (cur.Text != ";") throw Abort("must be ';'");
+                    ReadSentence();
+                }
+                else if (cur.Text == "throw")
+                {
                     MoveNext();
+                    Debug.Write(indent);
+                    Debug.Write("raise <| ");
+                    ReadExpr();
+                    Debug.WriteLine();
                 }
                 else
                 {
                     MoveNext();
-                    ReadSentence();
+                    if (cur.Text != ";") throw Abort("must be ';'");
+                    MoveNext();
                 }
                 indent = bak;
             }

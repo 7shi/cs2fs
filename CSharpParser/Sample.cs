@@ -42,7 +42,7 @@ namespace TestApp
                 case 3:
                     return "three";
                 default:
-                    return "other";
+                    throw new Exception();
             }
         }
     }
