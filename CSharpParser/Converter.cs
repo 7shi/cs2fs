@@ -21,7 +21,7 @@ namespace CSharpParser
             if (tokens.Length > 0) cur = tokens[0];
         }
 
-        public bool MoveNext()
+        private bool MoveNext()
         {
             if (pos < tokens.Length)
             {
@@ -52,7 +52,7 @@ namespace CSharpParser
             }
         }
 
-        public string ReadUsing()
+        private string ReadUsing()
         {
             var sw = new StringWriter();
             while (MoveNext() && cur.Text != ";")
@@ -62,7 +62,7 @@ namespace CSharpParser
             return sw.ToString();
         }
 
-        public void ReadNamespace()
+        private void ReadNamespace()
         {
             Debug.Write("namespace ");
             while (MoveNext() && cur.Text != "{")
@@ -90,7 +90,7 @@ namespace CSharpParser
             MoveNext();
         }
 
-        public void ReadClass()
+        private void ReadClass()
         {
             MoveNext();
             string name = cur.Text;
@@ -109,7 +109,7 @@ namespace CSharpParser
             MoveNext();
         }
 
-        public void ReadMember(string access, bool isStatic)
+        private void ReadMember(string access, bool isStatic)
         {
             if (cur.Text == "static")
             {
@@ -118,24 +118,110 @@ namespace CSharpParser
             }
             else if (IsAccess(cur.Text))
             {
+                var acc = cur.Text;
                 MoveNext();
-                ReadMember(cur.Text, isStatic);
+                ReadMember(acc, isStatic);
             }
             else
             {
                 var decl = ReadDecl();
-                if (cur.Text == "(")
-                    ReadMethod(decl[0], decl[1], access, isStatic);
-                else if (cur.Text == ";")
-                    ReadField(decl[0], decl[1], access, isStatic);
-                else
-                    throw Abort("syntax error");
+                switch (cur.Text)
+                {
+                    case "(":
+                        ReadMethod(decl[0], decl[1], access, isStatic);
+                        break;
+                    case ";":
+                        ReadField(decl[0], decl[1], access, isStatic);
+                        break;
+                    case "{":
+                        ReadProperty(decl[0], decl[1], access, isStatic);
+                        break;
+                    case "=":
+                        throw Abort("default value not supported");
+                    default:
+                        throw Abort("syntax error");
+                }
             }
         }
 
-        public void ReadField(string name, string type, string access, bool isStatic)
+        private void ReadProperty(string name, string type, string access, bool isStatic)
+        {
+            var autoField = false;
+            MoveNext();
+            while (cur.Text != "}")
+            {
+                var act = cur.Text;
+                if (act == "get" || act == "set")
+                {
+                    MoveNext();
+                    if (cur.Text == ";")
+                    {
+                        MoveNext();
+                        if (!autoField)
+                        {
+                            MakeField("_" + name, type, "private", isStatic);
+                            autoField = true;
+                        }
+                    }
+                    Debug.Write("    ");
+                    if (isStatic) Debug.Write("static ");
+                    Debug.Write("member ");
+                    if (access == "private") Debug.Write("private ");
+                    if (!isStatic) Debug.Write("this.");
+                    Debug.Write(name);
+                    if (act == "get")
+                    {
+                        Debug.Write(" =");
+                        if (autoField)
+                            Debug.WriteLine(" _" + name);
+                        else
+                        {
+                            if (pos + 1 < tokens.Length && tokens[pos + 1].Text == "return")
+                            {
+                                MoveNext();
+                                MoveNext();
+                                Debug.Write(" ");
+                                ReadExpr();
+                                Debug.WriteLine();
+                                if (cur.Text != "}")
+                                    throw Abort("block not closed");
+                                MoveNext();
+                            }
+                            else
+                            {
+                                Debug.WriteLine();
+                                indent = new string(' ', 8);
+                                ReadBlock();
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Debug.Write(" with set(value) =");
+                        if (autoField)
+                            Debug.WriteLine(" _" + name + " <- value");
+                        else
+                        {
+                            Debug.WriteLine();
+                            indent = new string(' ', 8);
+                            ReadBlock();
+                        }
+                    }
+                }
+                else
+                    throw Abort("syntax error");
+            }
+            MoveNext();
+        }
+
+        private void ReadField(string name, string type, string access, bool isStatic)
         {
             MoveNext();
+            MakeField(name, type, access, isStatic);
+        }
+
+        private static void MakeField(string name, string type, string access, bool isStatic)
+        {
             Debug.Write("    [<DefaultValue>] ");
             if (isStatic) Debug.Write("static ");
             Debug.Write("val mutable ");
@@ -143,7 +229,7 @@ namespace CSharpParser
             Debug.WriteLine("{0} : {1}", name, type);
         }
 
-        public void ReadMethod(string name, string type, string access, bool isStatic)
+        private void ReadMethod(string name, string type, string access, bool isStatic)
         {
             Debug.WriteLine();
             Debug.Write("    ");
@@ -183,49 +269,7 @@ namespace CSharpParser
             ReadBlock();
         }
 
-        public static string ConvType(string type)
-        {
-            switch (type)
-            {
-                case "uint":
-                    return "uint32";
-                case "short":
-                    return "int16";
-                case "ushort":
-                    return "uint16";
-                case "long":
-                    return "int64";
-                case "ulong":
-                    return "uint64";
-                default:
-                    return type;
-            }
-        }
-
-        public static string ConvOp(string op)
-        {
-            switch (op)
-            {
-                case "=":
-                    return "<-";
-                case "==":
-                    return "=";
-                case ">>":
-                    return ">>>";
-                case "<<":
-                    return "<<<";
-                case "&":
-                    return "&&&";
-                case "|":
-                    return "|||";
-                case "^":
-                    return "^^^";
-                default:
-                    return op;
-            }
-        }
-
-        public void ReadArgs()
+        private void ReadArgs()
         {
             while (cur.Text != ")")
             {
@@ -239,10 +283,10 @@ namespace CSharpParser
             MoveNext();
         }
 
-        public string[] ReadDecl()
+        private string[] ReadDecl()
         {
             var list = new List<string>();
-            while (cur.Text.Length > 1 || "();,".IndexOf(cur.Text) < 0)
+            while (cur.Text.Length > 1 || "(){};,=".IndexOf(cur.Text) < 0)
             {
                 list.Add(cur.Text);
                 MoveNext();
@@ -256,7 +300,7 @@ namespace CSharpParser
             return new[] { name, type };
         }
 
-        public void ReadArg()
+        private void ReadArg()
         {
             var decl = ReadDecl();
             if (decl[1] == null)
@@ -264,8 +308,9 @@ namespace CSharpParser
             Debug.Write(decl[0] + " : " + decl[1]);
         }
 
-        public void ReadBlock()
+        private void ReadBlock()
         {
+            if (cur.Text != "{") throw Abort("block required");
             MoveNext();
             while (cur != null && cur.Text != "}")
             {
@@ -273,6 +318,10 @@ namespace CSharpParser
                 {
                     case "if":
                         ReadIf();
+                        break;
+                    case "return":
+                        MoveNext();
+                        ReadSentence();
                         break;
                     default:
                         ReadSentence();
@@ -289,7 +338,7 @@ namespace CSharpParser
             Debug.WriteLine();
         }
 
-        public void ReadExpr()
+        private void ReadExpr()
         {
             while (cur.Text != ";" && cur.Text != ")")
             {
@@ -303,6 +352,16 @@ namespace CSharpParser
                 else if (cur.Text == "." || cur.Type != TokenType.Operator)
                 {
                     Debug.Write(cur.Text);
+                    MoveNext();
+                }
+                else if (cur.Text == "!")
+                {
+                    Debug.Write("not ");
+                    MoveNext();
+                }
+                else if (cur.Text == "~")
+                {
+                    Debug.Write("~~~");
                     MoveNext();
                 }
                 else
@@ -322,7 +381,7 @@ namespace CSharpParser
                 ReadSentence();
         }
 
-        public void ReadIf()
+        private void ReadIf()
         {
             MoveNext();
             Debug.Write(indent);
@@ -366,6 +425,48 @@ namespace CSharpParser
         {
             return new Exception(string.Format(
                 "[{0}, {1}] {2}: {3}", cur.Line, cur.Column, message, cur.Text));
+        }
+
+        public static string ConvType(string type)
+        {
+            switch (type)
+            {
+                case "uint":
+                    return "uint32";
+                case "short":
+                    return "int16";
+                case "ushort":
+                    return "uint16";
+                case "long":
+                    return "int64";
+                case "ulong":
+                    return "uint64";
+                default:
+                    return type;
+            }
+        }
+
+        public static string ConvOp(string op)
+        {
+            switch (op)
+            {
+                case "=":
+                    return "<-";
+                case "==":
+                    return "=";
+                case ">>":
+                    return ">>>";
+                case "<<":
+                    return "<<<";
+                case "&":
+                    return "&&&";
+                case "|":
+                    return "|||";
+                case "^":
+                    return "^^^";
+                default:
+                    return op;
+            }
         }
 
         public static bool IsAccess(string s)

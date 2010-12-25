@@ -15,6 +15,14 @@ namespace CSharpParser
         public Form1()
         {
             InitializeComponent();
+
+            var dir = Path.GetDirectoryName(Application.ExecutablePath);
+            var sample = Path.Combine(dir, "Sample.cs");
+            try
+            {
+                textBox1.Text = File.ReadAllText(sample);
+            }
+            catch { }
         }
 
         private void exitToolStripMenuItem_Click(object sender, EventArgs e)
@@ -41,7 +49,7 @@ namespace CSharpParser
                 }
                 catch (Exception ex)
                 {
-                    textBox2.AppendText(ex.Message + Environment.NewLine);
+                    textBox2.AppendText("\r\n" + ex.Message + "\r\n");
                 }
 #  endif
 #else

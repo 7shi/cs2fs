@@ -77,11 +77,10 @@ namespace CSharpParser
         {
             get
             {
-                return
-                    Type == TokenType.Space ||
-                    Type == TokenType.NewLine ||
-                    Type == TokenType.Comment ||
-                    Type == TokenType.Comment1;
+                return Type == TokenType.Space
+                     || Type == TokenType.NewLine
+                     || Type == TokenType.Comment
+                     || Type == TokenType.Comment1;
             }
         }
     }
