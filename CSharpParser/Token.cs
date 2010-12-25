@@ -8,9 +8,27 @@ namespace CSharpParser
 {
     public enum TokenType
     {
-        None, Error, Space, NewLine, Any, Operator, Separator, Keyword,
-        Int, UInt, Long, ULong, Float, Double, String, Char,
-        Comment, Comment1, BeginBlock, EndBlock, Comma
+        None,
+        Error,
+        Space,
+        NewLine,
+        Any,
+        Operator,
+        Separator,
+        Keyword,
+        Int,
+        UInt,
+        Long,
+        ULong,
+        Float,
+        Double,
+        String,
+        Char,
+        Comment,
+        Comment1,
+        BeginBlock,
+        EndBlock,
+        Comma
     }
 
     public class Token
