@@ -46,8 +46,7 @@ namespace CSharpParser
                         ReadNamespace();
                         break;
                     default:
-                        MoveNext();
-                        break;
+                        throw Abort("syntax error");
                 }
             }
         }
@@ -77,26 +76,29 @@ namespace CSharpParser
             MoveNext();
             while (cur != null && cur.Text != "}")
             {
-                switch (cur.Text)
+                if (IsAccess(cur.Text))
                 {
-                    case "class":
-                        ReadClass();
-                        break;
-                    default:
-                        MoveNext();
-                        break;
+                    var acc = cur.Text;
+                    MoveNext();
+                    if (cur.Text != "class")
+                        throw Abort("class required");
+                    ReadClass(acc);
                 }
+                else if (cur.Text == "class")
+                    ReadClass("private");
             }
             MoveNext();
         }
 
-        private void ReadClass()
+        private void ReadClass(string access)
         {
             MoveNext();
             string name = cur.Text;
             MoveNext();
             Debug.WriteLine();
-            Debug.WriteLine("type {0} =", name);
+            Debug.Write("type ");
+            if (access == "private") Debug.Write("private ");
+            Debug.WriteLine("{0} =", name);
             if (cur.Text == ":")
             {
                 throw Abort("inherit not supported");
@@ -340,6 +342,9 @@ namespace CSharpParser
                         case "while":
                             ReadWhile();
                             break;
+                        case "switch":
+                            ReadSwitch();
+                            break;
                         case "continue":
                         case "break":
                             throw Abort("not supported");
@@ -463,6 +468,83 @@ namespace CSharpParser
             indent += "    ";
             ReadBlockOrExpr();
             indent = bak;
+        }
+
+        private void ReadSwitch()
+        {
+            MoveNext();
+            Debug.Write(indent);
+            Debug.Write("match ");
+            if (cur.Text != "(") throw Abort("must be '('");
+            MoveNext();
+            ReadExpr();
+            Debug.WriteLine(" with");
+            if (cur.Text != "{") throw Abort("must be '{'");
+            MoveNext();
+            while (cur.Text != "}")
+            {
+                if (cur.Text == "case")
+                {
+                    while (cur.Text == "case")
+                    {
+                        MoveNext();
+                        Debug.Write(indent);
+                        Debug.Write("| ");
+                        Debug.Write(cur.Text);
+                        MoveNext();
+                        if (cur.Text != ":") throw Abort("must be ':'");
+                        MoveNext();
+                        if (cur.Text != "case")
+                            Debug.Write(" ->");
+                        else
+                            Debug.WriteLine();
+                    }
+                    ReadCaseBlock();
+                }
+                else if (cur.Text == "default")
+                {
+                    MoveNext();
+                    Debug.Write(indent);
+                    Debug.Write("| _ ->");
+                    if (cur.Text != ":") throw Abort("must be ':'");
+                    MoveNext();
+                    ReadCaseBlock();
+                }
+                else
+                    throw Abort("syntax error");
+            }
+            MoveNext();
+        }
+
+        private void ReadCaseBlock()
+        {
+            if (cur.Text == "break")
+            {
+                Debug.WriteLine(" ()");
+                MoveNext();
+                if (cur.Text != ";") throw Abort("must be ';'");
+                MoveNext();
+            }
+            else
+            {
+                Debug.WriteLine();
+                var bak = indent;
+                indent += "    ";
+                while (cur.Text != "break" && cur.Text != "return")
+                    ReadSentence();
+                if (cur.Text == "break")
+                {
+                    MoveNext();
+                    if (cur.Text != ";") throw Abort("must be ';'");
+                    MoveNext();
+                }
+                else
+                {
+                    MoveNext();
+                    ReadSentence();
+                }
+                indent = bak;
+            }
         }
 
         private Exception Abort(string message)

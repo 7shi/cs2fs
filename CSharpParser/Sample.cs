@@ -30,5 +30,20 @@ namespace TestApp
                 this.a = this.a + 1;
             }
         }
+
+        public string Test3(int a)
+        {
+            switch (a)
+            {
+                case 1:
+                    return "one";
+                case 2:
+                    return "two";
+                case 3:
+                    return "three";
+                default:
+                    return "other";
+            }
+        }
     }
 }
