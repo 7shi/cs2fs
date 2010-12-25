@@ -72,5 +72,17 @@ namespace CSharpParser
                 return sw.ToString();
             }
         }
+
+        public bool CanOmit
+        {
+            get
+            {
+                return
+                    Type == TokenType.Space ||
+                    Type == TokenType.NewLine ||
+                    Type == TokenType.Comment ||
+                    Type == TokenType.Comment1;
+            }
+        }
     }
 }
