@@ -8,7 +8,7 @@ namespace CSharpParser
 {
     public enum TokenType
     {
-        None, Error, Space, NewLine, Name, Operator, Separator, Keyword,
+        None, Error, Space, NewLine, Any, Operator, Separator, Keyword,
         Int, UInt, Long, ULong, Float, Double, String, Char,
         Comment, Comment1, BeginBlock, EndBlock, Comma
     }
@@ -27,6 +27,33 @@ namespace CSharpParser
             Line = line;
             Column = column;
         }
+
+        public string Align(int tab)
+        {
+            if (Type != TokenType.Space)
+                return Text;
+            else
+            {
+                var sw = new StringWriter();
+                int column = Column;
+                foreach (var ch in Text)
+                {
+                    if (ch == '\t')
+                    {
+                        int len = tab - ((column - 1) % tab);
+                        sw.Write(new String(' ', len));
+                        column += len;
+                    }
+                    else
+                    {
+                        sw.Write(ch);
+                        column++;
+                    }
+                }
+                sw.Close();
+                return sw.ToString();
+            }
+        }
     }
 
     public class Lexer
@@ -39,6 +66,8 @@ namespace CSharpParser
         public string Token { get; private set; }
         public TokenType Type { get; private set; }
 
+        private char current;
+
         public static readonly string[] Operators =
         {
             ".", "(", ")", "[", "]", "++", "--", "->",
@@ -46,7 +75,7 @@ namespace CSharpParser
             "<<", ">>", "<", ">", "<=", ">=", "==", "!=",
             "^", "|", "&&", "||", "??", "?:", "=", "+=",
             "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=",
-            ">>=", "=>"
+            ">>=", "=>", "?", ":"
         };
 
         public static readonly string[] Keywords =
@@ -115,6 +144,25 @@ namespace CSharpParser
             Source = source;
             column = 1;
             line = 1;
+            if (Source.Length > 0) current = Source[0];
+        }
+
+        private bool CanRead(int len)
+        {
+            return position + len <= Source.Length;
+        }
+
+        private void NextChar()
+        {
+            position++;
+            column++;
+            current = position < Source.Length ? Source[position] : '\0';
+        }
+
+        private void SetResult(TokenType type)
+        {
+            Token = Source.Substring(Position, position - Position);
+            Type = type;
         }
 
         public Token[] ReadAllTokens()
@@ -141,87 +189,77 @@ namespace CSharpParser
                 return false;
             }
 
-            var ch = Source[position];
-            if (ch == ' ' || ch == '\t')
+            if (current == ' ' || current == '\t')
             {
-                Token = ReadSpaces();
-                Type = TokenType.Space;
+                while (CanRead(1) && IsSpace(current))
+                    NextChar();
+                SetResult(TokenType.Space);
                 return true;
             }
-            else if (ch == '\r')
+            else if (current == '\r')
             {
-                position++;
-                if (position < Source.Length)
+                NextChar();
+                if (CanRead(1))
                 {
-                    if (Source[position] == '\n') position++;
+                    if (current == '\n') NextChar();
                 }
                 column = 1;
                 line++;
-                Token = Source.Substring(Position, position - Position);
-                Type = TokenType.NewLine;
+                SetResult(TokenType.NewLine);
                 return true;
             }
-            else if (ch == '\n')
+            else if (current == '\n')
             {
-                position++;
+                NextChar();
                 column = 1;
                 line++;
                 Token = "\n";
                 Type = TokenType.NewLine;
                 return true;
             }
-            else if (ch == ';')
+            else if (current == ';')
             {
-                position++;
-                column++;
+                NextChar();
                 Token = ";";
                 Type = TokenType.Separator;
                 return true;
             }
-            else if (ch == '\'')
+            else if (current == '\'')
                 return ReadChar();
-            else if (ch == '"')
+            else if (current == '"')
                 return ReadString();
-            else if (ch == '{')
+            else if (current == '{')
             {
-                position++;
-                column++;
+                NextChar();
                 Token = "{";
                 Type = TokenType.BeginBlock;
                 return true;
             }
-            else if (ch == '}')
+            else if (current == '}')
             {
-                position++;
-                column++;
+                NextChar();
                 Token = "}";
                 Type = TokenType.EndBlock;
                 return true;
             }
-            else if (ch == ',')
+            else if (current == ',')
             {
-                position++;
-                column++;
+                NextChar();
                 Token = ",";
                 Type = TokenType.Comma;
                 return true;
             }
-            else if (ch == '/' && IsBeginComment())
+            else if (current == '/' && IsBeginComment())
                 return ReadComment();
-            else if (char.IsNumber(ch))
+            else if (char.IsNumber(current))
                 return ReadNumber();
-            else if (ch == '_' || char.IsLetter(ch))
+            else if (IsFirstLetter(current))
             {
-                do
-                {
-                    position++;
-                    column++;
-                } while (position < Source.Length && IsLetter(Source[position]));
+                NextChar();
+                while (CanRead(1) && IsLetter(current))
+                    NextChar();
                 Token = Source.Substring(Position, position - Position);
-                if (KwStrs.ContainsKey(Token))
-                    Type = TokenType.Keyword;
-                else
-                    Type = TokenType.Name;
+                Type = KwStrs.ContainsKey(Token) ? TokenType.Keyword : TokenType.Any;
                 return true;
             }
             else
@@ -231,23 +269,33 @@ namespace CSharpParser
                 {
                     position += op.Length;
                     column += op.Length;
+                    current = position < Source.Length ? Source[position] : '\0';
                     Token = op;
                     Type = TokenType.Operator;
                     return true;
                 }
                 else
                 {
-                    position++;
-                    column++;
+                    NextChar();
                     Error("invalid character");
                     return false;
                 }
             }
         }
 
+        public static bool IsSpace(char ch)
+        {
+            return ch == ' ' || ch == '\t';
+        }
+
+        public static bool IsFirstLetter(char ch)
+        {
+            return ch == '_' || ('A' <= ch && ch <= 'Z') || ('a' <= ch && ch <= 'z') || ch >= (char)128;
+        }
+
         public static bool IsLetter(char ch)
         {
-            return ch == '_' || char.IsLetterOrDigit(ch);
+            return IsFirstLetter(ch) || char.IsNumber(ch);
         }
 
         public static bool IsNewLine(char ch)
@@ -257,53 +305,44 @@ namespace CSharpParser
 
         private bool IsBeginComment()
         {
-            if (position + 1 < Source.Length)
+            if (CanRead(2))
             {
                 var ch = Source[position + 1];
-                return Source[position] == '/' && (ch == '/' || ch == '*');
+                return current == '/' && (ch == '/' || ch == '*');
             }
             else
-            {
                 return false;
-            }
         }
 
         private bool IsEndComment()
         {
-            if (position + 1 < Source.Length)
-                return Source[position] == '*' && Source[position + 1] == '/';
+            if (CanRead(2))
+                return current == '*' && Source[position + 1] == '/';
             else
                 return false;
         }
 
         private bool ReadComment()
         {
-            position += 2;
-            column += 2;
-            if (Source[position - 1] == '/')
+            NextChar();
+            var ch = current;
+            NextChar();
+            if (ch == '/')
             {
-                while (position < Source.Length && !IsNewLine(Source[position]))
-                {
-                    position++;
-                    column++;
-                }
-                Type = TokenType.Comment1;
-                Token = Source.Substring(Position, position - Position);
+                while (CanRead(1) && !IsNewLine(current))
+                    NextChar();
+                SetResult(TokenType.Comment1);
                 return true;
             }
             else
             {
-                while (position < Source.Length && !IsEndComment())
-                {
-                    position++;
-                    column++;
-                }
+                while (CanRead(1) && !IsEndComment())
+                    NextChar();
                 if (position + 1 < Source.Length)
                 {
-                    position += 2;
-                    column += 2;
-                    Type = TokenType.Comment;
-                    Token = Source.Substring(Position, position - Position);
+                    NextChar();
+                    NextChar();
+                    SetResult(TokenType.Comment);
                     return true;
                 }
                 else
@@ -316,27 +355,17 @@ namespace CSharpParser
 
         private bool ReadString()
         {
-            position++;
-            column++;
-            while (position < Source.Length && Source[position] != '"')
+            NextChar();
+            while (CanRead(1) && current != '"')
             {
-                if (position + 1 < Source.Length && Source[position] == '\\')
-                {
-                    position += 2;
-                    column += 2;
-                }
-                else
-                {
-                    position++;
-                    column++;
-                }
+                if (position + 1 < Source.Length && current == '\\')
+                    NextChar();
+                NextChar();
             }
-            if (position < Source.Length && Source[position] == '"')
+            if (current == '"')
             {
-                position++;
-                column++;
-                Token = Source.Substring(Position, position - Position);
-                Type = TokenType.String;
+                NextChar();
+                SetResult(TokenType.String);
                 return true;
             }
             else
@@ -348,21 +377,16 @@ namespace CSharpParser
 
         private bool ReadChar()
         {
-            position++;
-            column++;
-            if (position < Source.Length)
+            NextChar();
+            if (CanRead(1))
             {
-                if (Source[position] == '\\')
+                if (position + 1 < Source.Length && current == '\\')
+                    NextChar();
+                NextChar();
+                if (current == '\'')
                 {
-                    position++;
-                    column++;
-                }
-                if (position + 1 < Source.Length && Source[position + 1] == '\'')
-                {
-                    position += 2;
-                    column += 2;
-                    Token = Source.Substring(Position, position - Position);
-                    Type = TokenType.Char;
+                    NextChar();
+                    SetResult(TokenType.Char);
                     return true;
                 }
                 else
@@ -380,14 +404,13 @@ namespace CSharpParser
 
         private string GetOperator()
         {
-            var ch = Source[position];
-            if (!OpHeads.Contains(ch))
+            if (!OpHeads.Contains(current))
                 return "";
             else
             {
                 int max = Source.Length - position;
                 var ret = "";
-                foreach (var op in OpDic[ch])
+                foreach (var op in OpDic[current])
                 {
                     if (ret == "" && op.Length <= max && Source.Substring(position, op.Length) == op)
                         ret = op;
@@ -396,114 +419,75 @@ namespace CSharpParser
             }
         }
 
-        private string ReadSpaces()
-        {
-            var sb = new StringBuilder();
-            while (position < Source.Length)
-            {
-                char ch = Source[position];
-                if (ch == ' ')
-                {
-                    sb.Append(ch);
-                    position++;
-                    column++;
-                }
-                else if (ch == '\t')
-                {
-                    int len = 4 - ((column - 1) & 3);
-                    sb.Append(new String(' ', len));
-                    position++;
-                    column += len;
-                }
-                else
-                    break;
-            }
-            return sb.ToString();
-        }
-
         private bool ReadNumber()
         {
-            do
-            {
-                position++;
-                column++;
-            } while (position < Source.Length && char.IsNumber(Source[position]));
-            if (position + 1 < Source.Length && Source[position] == '.' && char.IsNumber(Source[position + 1]))
+            NextChar();
+            while (CanRead(1) && char.IsNumber(current))
+                NextChar();
+            if (current == '.')
                 ReadFloat();
             else
             {
-                if (position < Source.Length)
+                if (CanRead(1))
                 {
-                    var ch2 = char.ToLower(Source[position]);
+                    var ch2 = char.ToLower(current);
                     if (ch2 == 'u')
                     {
-                        position++;
-                        column++;
-                        if (position < Source.Length && char.ToLower(Source[position]) == 'l')
+                        NextChar();
+                        if (CanRead(1) && char.ToLower(current) == 'l')
                         {
-                            position++;
-                            column++;
-                            Type = TokenType.ULong;
+                            NextChar();
+                            SetResult(TokenType.ULong);
                         }
                         else
                         {
-                            Type = TokenType.UInt;
+                            SetResult(TokenType.UInt);
                         }
                     }
                     else if (ch2 == 'l')
                     {
-                        position++;
-                        column++;
-                        Type = TokenType.Long;
+                        NextChar();
+                        SetResult(TokenType.Long);
                     }
                     else
-                        Type = TokenType.Int;
+                        SetResult(TokenType.Int);
                 }
                 else
-                    Type = TokenType.Int;
+                    SetResult(TokenType.Int);
             }
-            Token = Source.Substring(Position, position - Position);
             return true;
         }
 
         private void ReadFloat()
         {
-            position++;
-            column++;
-            do
+            NextChar();
+            while (CanRead(1) && char.IsNumber(current))
+                NextChar();
+            if (CanRead(1))
             {
-                position++;
-                column++;
-            } while (position < Source.Length && char.IsNumber(Source[position]));
-            if (position < Source.Length)
-            {
-                var ch2 = char.ToLower(Source[position]);
+                var ch2 = char.ToLower(current);
                 if (ch2 == 'f')
                 {
-                    position++;
-                    column++;
-                    Type = TokenType.Float;
+                    NextChar();
+                    SetResult(TokenType.Float);
                 }
                 else if (ch2 == 'd')
                 {
-                    position++;
-                    column++;
-                    Type = TokenType.Double;
+                    NextChar();
+                    SetResult(TokenType.Double);
                 }
                 else
-                    Type = TokenType.Double;
+                    SetResult(TokenType.Double);
             }
             else
-                Type = TokenType.Double;
+                SetResult(TokenType.Double);
         }
 
         private void Error(string message)
         {
-            Token = Source.Substring(Position, position - Position);
-            Type = TokenType.Error;
+            SetResult(TokenType.Error);
             Debug.WriteLine(string.Format(
-                "[{0},{1}] {2}: {3}",
-                Line, Column, message, Token));
+                "[{0},{1}] {2}: {3}", Line, Column, message, Token));
         }
     }
 }

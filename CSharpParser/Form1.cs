@@ -37,7 +37,7 @@ namespace CSharpParser
                     switch (token.Type)
                     {
                         case TokenType.Space:
-                            sw.WriteLine("{0}", token.Text.Length);
+                            sw.WriteLine("{0}", token.Align(4).Length);
                             break;
                         case TokenType.NewLine:
                             sw.WriteLine(Debug.Escape(token.Text));
