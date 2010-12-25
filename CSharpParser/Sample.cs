@@ -10,7 +10,11 @@ namespace TestApp
     {
         private int a;
         private int b;
-        public int Value { get { return this.a; } }
+        public int Add { get { return this.a + this.b; } }
+
+        private Test()
+        {
+        }
 
         public Test(int a, int b)
         {
@@ -20,15 +24,11 @@ namespace TestApp
 
         public void Test2()
         {
-            if (this.a < this.b)
-                Console.WriteLine("abc");
-            else
-                Console.WriteLine("def");
-        }
-
-        public int Add()
-        {
-            return this.a + this.b;
+            while (this.a < this.b)
+            {
+                Console.WriteLine("a = {0}, b = {1}", this.a, this.b);
+                this.a = this.a + 1;
+            }
         }
     }
 }

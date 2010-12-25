@@ -96,11 +96,10 @@ namespace CSharpParser
             string name = cur.Text;
             MoveNext();
             Debug.WriteLine();
-            Debug.WriteLine("type {0}() as this =", name);
+            Debug.WriteLine("type {0} =", name);
             if (cur.Text == ":")
             {
-                MoveNext();
-                Debug.WriteLine("    inherit {0}()", cur.Text);
+                throw Abort("inherit not supported");
             }
             while (cur.Text != "{") MoveNext();
             MoveNext();
@@ -238,18 +237,10 @@ namespace CSharpParser
             {
                 // constructor
                 MoveNext();
-                if (cur.Text == ")")
-                {
-                    // primary constructor
-                    Debug.WriteLine("do");
-                }
-                else
-                {
-                    if (access == "private") Debug.Write("private ");
-                    Debug.Write("new(");
-                    ReadArgs();
-                    Debug.WriteLine(") as this = {0}() then", name);
-                }
+                if (access == "private") Debug.Write("private ");
+                Debug.Write("new(");
+                ReadArgs();
+                Debug.Write(") ");
             }
             else
             {
@@ -260,13 +251,29 @@ namespace CSharpParser
                 MoveNext();
                 ReadArgs();
                 if (type == "void")
-                    Debug.WriteLine(") =");
+                    Debug.Write(") =");
                 else
-                    Debug.WriteLine(") : {0} =", type);
+                    Debug.Write(") : {0} =", type);
             }
-            while (cur.Text != "{") MoveNext();
-            indent = new string(' ', 8);
-            ReadBlock();
+            if (cur.Text != "{") throw Abort("block required");
+            if (pos + 1 < tokens.Length && tokens[pos + 1].Text == "}")
+            {
+                MoveNext();
+                MoveNext();
+                if (type == null)
+                    Debug.WriteLine("= {{}}");
+                else
+                    Debug.WriteLine(" ()");
+            }
+            else
+            {
+                if (type == null)
+                    Debug.WriteLine("as this = {{}} then");
+                else
+                    Debug.WriteLine();
+                indent = new string(' ', 8);
+                ReadBlock();
+            }
         }
 
         private void ReadArgs()
@@ -312,20 +319,34 @@ namespace CSharpParser
         {
             if (cur.Text != "{") throw Abort("block required");
             MoveNext();
-            while (cur != null && cur.Text != "}")
+            if (cur.Text == "}")
             {
-                switch (cur.Text)
+                Debug.Write(indent);
+                Debug.WriteLine("()");
+            }
+            else
+            {
+                while (cur != null && cur.Text != "}")
                 {
-                    case "if":
-                        ReadIf();
-                        break;
-                    case "return":
-                        MoveNext();
-                        ReadSentence();
-                        break;
-                    default:
-                        ReadSentence();
-                        break;
+                    switch (cur.Text)
+                    {
+                        case "return":
+                            MoveNext();
+                            ReadSentence();
+                            break;
+                        case "if":
+                            ReadIf();
+                            break;
+                        case "while":
+                            ReadWhile();
+                            break;
+                        case "continue":
+                        case "break":
+                            throw Abort("not supported");
+                        default:
+                            ReadSentence();
+                            break;
+                    }
                 }
             }
             MoveNext();
@@ -349,9 +370,14 @@ namespace CSharpParser
                     ReadExpr();
                     Debug.Write(")");
                 }
+                else if (cur.Text == ",")
+                {
+                    Debug.Write(", ");
+                    MoveNext();
+                }
                 else if (cur.Text == "." || cur.Type != TokenType.Operator)
                 {
-                    Debug.Write(cur.Text);
+                    Debug.Write("{0}", cur.Text);
                     MoveNext();
                 }
                 else if (cur.Text == "!")
@@ -366,6 +392,9 @@ namespace CSharpParser
                 }
                 else
                 {
+                    if (cur.Text == "++" || cur.Text == "--"
+                        || (cur.Text.Length > 1 && cur.Text[cur.Text.Length - 1] == '='))
+                        throw Abort("not supported");
                     Debug.Write(" " + ConvOp(cur.Text) + " ");
                     MoveNext();
                 }
@@ -419,6 +448,21 @@ namespace CSharpParser
             }
             else
                 indent = bak;
+        }
+
+        private void ReadWhile()
+        {
+            MoveNext();
+            Debug.Write(indent);
+            Debug.Write("while ");
+            if (cur.Text != "(") throw Abort("must be '('");
+            MoveNext();
+            ReadExpr();
+            Debug.WriteLine(" do");
+            var bak = indent;
+            indent += "    ";
+            ReadBlockOrExpr();
+            indent = bak;
         }
 
         private Exception Abort(string message)
