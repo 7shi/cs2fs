@@ -179,36 +179,43 @@ namespace CSharpParser
             }
         }
 
-        private void ReadProperty(string name, string type, string access, bool isStatic)
+        private void ReadProperty(string name, string t, string access, bool isStatic)
         {
+            Debug.WriteLine();
             var autoField = false;
             MoveNext();
             while (cur.Text != "}")
             {
-                var act = cur.Text;
-                if (act == "get" || act == "set")
+                var acc = access;
+                if (IsAccess(cur.Text))
                 {
+                    acc = cur.Text;
+                    MoveNext();
+                }
+                if (cur.Text == "get" || cur.Text == "set")
+                {
+                    var act = cur.Text;
                     MoveNext();
                     if (cur.Text == ";")
                     {
                         MoveNext();
                         if (!autoField)
                         {
-                            MakeField("_" + name, type, "private", isStatic);
+                            MakeField("_" + name, t, "private", isStatic);
                             autoField = true;
                         }
                     }
                     Debug.Write("    ");
                     if (isStatic) Debug.Write("static ");
                     Debug.Write("member ");
-                    if (access == "private") Debug.Write("private ");
+                    if (acc == "private") Debug.Write("private ");
                     if (!isStatic) Debug.Write("this.");
                     Debug.Write(name);
                     if (act == "get")
                     {
                         Debug.Write(" =");
                         if (autoField)
-                            Debug.WriteLine(" _" + name);
+                            Debug.WriteLine(" this._" + name);
                         else
                         {
                             if (pos + 1 < tokens.Length && tokens[pos + 1].Text == "return")
@@ -234,7 +241,7 @@ namespace CSharpParser
                     {
                         Debug.Write(" with set(value) =");
                         if (autoField)
-                            Debug.WriteLine(" _" + name + " <- value");
+                            Debug.WriteLine(" this._" + name + " <- value");
                         else
                         {
                             Debug.WriteLine();
@@ -249,27 +256,27 @@ namespace CSharpParser
             MoveNext();
         }
 
-        private void ReadField(string name, string type, string access, bool isStatic)
+        private void ReadField(string name, string t, string access, bool isStatic)
         {
             MoveNext();
-            MakeField(name, type, access, isStatic);
+            MakeField(name, t, access, isStatic);
         }
 
-        private static void MakeField(string name, string type, string access, bool isStatic)
+        private static void MakeField(string name, string t, string access, bool isStatic)
         {
             Debug.Write("    [<DefaultValue>] ");
             if (isStatic) Debug.Write("static ");
             Debug.Write("val mutable ");
             if (access == "private") Debug.Write("private ");
-            Debug.WriteLine("{0} : {1}", name, type);
+            Debug.WriteLine("{0} : {1}", name, t);
         }
 
-        private void ReadMethod(string name, string type, string access, bool isStatic)
+        private void ReadMethod(string name, string t, string access, bool isStatic)
         {
             Debug.WriteLine();
             Debug.Write("    ");
             if (isStatic) Debug.Write("static ");
-            if (type == null)
+            if (t == null)
             {
                 // constructor
                 MoveNext();
@@ -286,24 +293,24 @@ namespace CSharpParser
                 Debug.Write(name + "(");
                 MoveNext();
                 ReadArgs();
-                if (type == "void")
+                if (t == "void")
                     Debug.Write(") =");
                 else
-                    Debug.Write(") : {0} =", type);
+                    Debug.Write(") : {0} =", t);
             }
             if (cur.Text != "{") throw Abort("block required");
             if (pos + 1 < tokens.Length && tokens[pos + 1].Text == "}")
             {
                 MoveNext();
                 MoveNext();
-                if (type == null)
+                if (t == null)
                     Debug.WriteLine("= {{}}");
                 else
                     Debug.WriteLine(" ()");
             }
             else
             {
-                if (type == null)
+                if (t == null)
                     Debug.WriteLine("as this = {{}} then");
                 else
                     Debug.WriteLine();
@@ -339,8 +346,8 @@ namespace CSharpParser
             var last = list.Count - 1;
             var name = list[last];
             list.RemoveAt(last);
-            var type = list.Count > 0 ? ConvType(string.Concat(list)) : null;
-            return new[] { name, type };
+            var t = list.Count > 0 ? ConvType(string.Concat(list)) : null;
+            return new[] { name, t };
         }
 
         private void ReadArg()
@@ -363,50 +370,54 @@ namespace CSharpParser
             else
             {
                 while (cur != null && cur.Text != "}")
-                {
-                    switch (cur.Text)
-                    {
-                        case "return":
-                            MoveNext();
-                            ReadSentence();
-                            break;
-                        case "if":
-                            ReadIf();
-                            break;
-                        case "while":
-                            ReadWhile();
-                            break;
-                        case "switch":
-                            ReadSwitch();
-                            break;
-                        case "continue":
-                        case "break":
-                            throw Abort("not supported");
-                        case "throw":
-                            Debug.Write(indent);
-                            Debug.Write("raise <| ");
-                            ReadExpr();
-                            Debug.WriteLine();
-                            break;
-                        default:
-                            ReadSentence();
-                            break;
-                    }
-                }
+                    ReadSentence();
             }
             MoveNext();
         }
 
         private void ReadSentence()
         {
-            Debug.Write(indent);
-            ReadExpr();
-            Debug.WriteLine();
+            switch (cur.Text)
+            {
+                case "return":
+                    MoveNext();
+                    ReadSentence();
+                    break;
+                case "if":
+                    ReadIf();
+                    break;
+                case "while":
+                    ReadWhile();
+                    break;
+                case "switch":
+                    ReadSwitch();
+                    break;
+                case "foreach":
+                    ReadForEach();
+                    break;
+                case "continue":
+                case "break":
+                    throw Abort("not supported");
+                case "throw":
+                    Debug.Write(indent);
+                    Debug.Write("raise <| ");
+                    ReadExpr();
+                    Debug.WriteLine();
+                    break;
+                case "var":
+                    ReadVar();
+                    break;
+                default:
+                    Debug.Write(indent);
+                    ReadExpr();
+                    Debug.WriteLine();
+                    break;
+            }
         }
 
         private void ReadExpr()
         {
-            while (cur.Text != ";" && cur.Text != ")")
+            while (cur.Text != ";" && cur.Text != ")" && cur.Text != ":")
             {
                 var t = cur.Text;
                 if (t == "(")
@@ -441,11 +452,14 @@ namespace CSharpParser
                     MoveNext();
                     Debug.Write("~~~");
                 }
+                else if (t != "==" && t != "!=" &&
+                    (t == "++" || t == "--"
+                    || (t.Length > 1 && t[t.Length - 1] == '=')))
+                {
+                    throw Abort("not supported");
+                }
                 else
                 {
-                    if (t == "++" || t == "--"
-                        || (t.Length > 1 && t[t.Length - 1] == '='))
-                        throw Abort("not supported");
                     MoveNext();
                     Debug.Write(" " + ConvOp(t) + " ");
                 }
@@ -516,6 +530,26 @@ namespace CSharpParser
             indent = bak;
         }
 
+        private void ReadForEach()
+        {
+            MoveNext();
+            Debug.Write(indent);
+            if (cur.Text != "(") throw Abort("must be '('");
+            MoveNext();
+            if (cur.Text != "var") throw Abort("must be 'var'");
+            MoveNext();
+            Debug.Write("for {0} in ", cur.Text);
+            MoveNext();
+            if (cur.Text != "in") throw Abort("must be 'in'");
+            MoveNext();
+            ReadExpr();
+            Debug.WriteLine(" do");
+            var bak = indent;
+            indent += "    ";
+            ReadBlockOrExpr();
+            indent = bak;
+        }
+
         private void ReadSwitch()
         {
             MoveNext();
@@ -536,10 +570,7 @@ namespace CSharpParser
                         MoveNext();
                         Debug.Write(indent);
                         Debug.Write("| ");
-                        Debug.Write(cur.Text);
-                        MoveNext();
-                        if (cur.Text != ":") throw Abort("must be ':'");
-                        MoveNext();
+                        ReadExpr();
                         if (cur.Text != "case")
                             Debug.Write(" ->");
                         else
@@ -601,15 +632,28 @@ namespace CSharpParser
             }
         }
 
+        private void ReadVar()
+        {
+            MoveNext();
+            if (cur.Type != TokenType.Any) throw Abort("name required");
+            Debug.Write(indent);
+            Debug.Write("let mutable {0} = ", cur.Text);
+            MoveNext();
+            if (cur.Text != "=") throw Abort("must be '='");
+            MoveNext();
+            ReadExpr();
+            Debug.WriteLine();
+        }
+
         private Exception Abort(string message)
         {
             return new Exception(string.Format(
                 "[{0}, {1}] {2}: {3}", cur.Line, cur.Column, message, cur.Text));
         }
 
-        public static string ConvType(string type)
+        public static string ConvType(string t)
         {
-            switch (type)
+            switch (t)
             {
                 case "uint":
                     return "uint32";
@@ -622,7 +666,7 @@ namespace CSharpParser
                 case "ulong":
                     return "uint64";
                 default:
-                    return type;
+                    return t;
             }
         }
 
@@ -634,6 +678,8 @@ namespace CSharpParser
                     return "<-";
                 case "==":
                     return "=";
+                case "!=":
+                    return "<>";
                 case ">>":
                     return ">>>";
                 case "<<":

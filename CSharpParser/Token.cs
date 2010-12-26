@@ -37,34 +37,34 @@ namespace CSharpParser
         public int Line { get; private set; }
         public int Column { get; private set; }
 
-        public Token(string name, TokenType type, int line, int column)
+        public Token(string name, TokenType t, int line, int column)
         {
-            Text = name;
-            Type = type;
-            Line = line;
-            Column = column;
+            this.Text = name;
+            this.Type = t;
+            this.Line = line;
+            this.Column = column;
         }
 
         public string Align(int tab)
         {
-            if (Type != TokenType.Space)
-                return Text;
+            if (this.Type != TokenType.Space)
+                return this.Text;
             else
             {
                 var sw = new StringWriter();
-                int column = Column;
-                foreach (var ch in Text)
+                var column = this.Column;
+                foreach (var ch in this.Text)
                 {
                     if (ch == '\t')
                     {
-                        int len = tab - ((column - 1) % tab);
+                        var len = tab - ((column - 1) % tab);
                         sw.Write(new String(' ', len));
-                        column += len;
+                        column = column + len;
                     }
                     else
                     {
                         sw.Write(ch);
-                        column++;
+                        column = column + 1;
                     }
                 }
                 sw.Close();
@@ -76,26 +76,26 @@ namespace CSharpParser
         {
             get
             {
-                return Type == TokenType.Space
-                     || Type == TokenType.NewLine
-                     || Type == TokenType.Comment
-                     || Type == TokenType.Comment1;
+                return this.Type == TokenType.Space
+                     || this.Type == TokenType.NewLine
+                     || this.Type == TokenType.Comment
+                     || this.Type == TokenType.Comment1;
             }
         }
 
         public void Write(TextWriter tw)
         {
-            tw.Write("[{0}, {1}] {2}: ", Line, Column, Type);
-            switch (Type)
+            tw.Write("[{0}, {1}] {2}: ", this.Line, this.Column, this.Type);
+            switch (this.Type)
             {
                 case TokenType.Space:
-                    tw.WriteLine("{0}", Align(4).Length);
+                    tw.WriteLine("{0}", this.Align(4).Length);
                     break;
                 case TokenType.NewLine:
-                    tw.WriteLine(Text.Replace("\r", "\\r").Replace("\n", "\\n"));
+                    tw.WriteLine(this.Text.Replace("\r", "\\r").Replace("\n", "\\n"));
                     break;
                 default:
-                    tw.WriteLine(Text);
+                    tw.WriteLine(this.Text);
                     break;
             }
 

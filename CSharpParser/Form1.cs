@@ -17,7 +17,7 @@ namespace CSharpParser
             InitializeComponent();
 
             var dir = Path.GetDirectoryName(Application.ExecutablePath);
-            var sample = Path.Combine(dir, "Sample.cs");
+            var sample = Path.Combine(dir, "Token.cs");
             try
             {
                 textBox1.Text = File.ReadAllText(sample);
@@ -50,6 +50,12 @@ namespace CSharpParser
                 textBox2.AppendText("\r\n" + ex.Message + "\r\n");
             }
 #endif
+        }
+
+        private void copyToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (textBox2.TextLength > 0)
+                Clipboard.SetText(textBox2.Text);
         }
     }
 
