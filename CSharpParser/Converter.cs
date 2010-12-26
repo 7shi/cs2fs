@@ -344,14 +344,14 @@ namespace CSharpParser
                 this.MoveNext();
                 this.MoveNext();
                 if (t == null)
-                    Debug.WriteLine("= {{}}");
+                    Debug.WriteLine("= {0}", "{}");
                 else
                     Debug.WriteLine(" ()");
             }
             else
             {
                 if (t == null)
-                    Debug.WriteLine("as this = {{}} then");
+                    Debug.WriteLine("as this = {0} then", "{}");
                 else
                     Debug.WriteLine();
                 this.indent = new string(' ', 8);
@@ -389,7 +389,10 @@ namespace CSharpParser
             var name = list[last];
             list.RemoveAt(last);
             if (list.Count > 0)
-                return new TypeName(Converter.ConvType(String.Concat(list)), name);
+            {
+                var t = Converter.ConvType(String.Concat(list.ToArray()));
+                return new TypeName(t, name);
+            }
             else
                 return new TypeName(null, name);
         }

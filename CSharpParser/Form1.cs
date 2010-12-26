@@ -60,6 +60,12 @@ namespace CSharpParser
             if (textBox2.TextLength > 0)
                 Clipboard.SetText(textBox2.Text);
         }
+
+        private void pasteToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (Clipboard.ContainsText())
+                textBox1.Text = Clipboard.GetText();
+        }
     }
 
     public static class Debug

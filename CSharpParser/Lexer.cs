@@ -52,7 +52,7 @@ namespace CSharpParser
                 }
                 var keys = new List<char>(dic.Keys);
                 keys.Sort();
-                Lexer.OpHeads = String.Concat(keys);
+                Lexer.OpHeads = new String(keys.ToArray());
                 Lexer.OpDic = new Dictionary<char, string[]>();
                 foreach (var i in Enumerable.Range(0, keys.Count))
                 {
@@ -192,7 +192,11 @@ namespace CSharpParser
                         this.Type = TokenType.Operator;
                     }
                     else
-                        throw new Exception("invalid character");
+                    {
+                        this.MoveNext();
+                        this.SetResult(TokenType.None);
+                        throw this.Abort("invalid character");
+                    }
                 }
                 return true;
             }
