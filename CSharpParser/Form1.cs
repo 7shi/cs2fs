@@ -17,7 +17,7 @@ namespace CSharpParser
             InitializeComponent();
 
             var dir = Path.GetDirectoryName(Application.ExecutablePath);
-            var sample = Path.Combine(dir, "Lexer.cs");
+            var sample = Path.Combine(dir, "Converter.cs");
             try
             {
                 textBox1.Text = File.ReadAllText(sample);
@@ -32,7 +32,7 @@ namespace CSharpParser
 
         private void convertToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            Debug.Output = textBox2;
+            Debug.Stream = new StringWriter();
             textBox2.Clear();
 
 #if DEBUG
@@ -47,9 +47,12 @@ namespace CSharpParser
 #if DEBUG
             catch (Exception ex)
             {
-                textBox2.AppendText("\r\n" + ex.Message + "\r\n");
+                Debug.WriteLine();
+                Debug.WriteLine(ex.Message);
             }
 #endif
+            Debug.Stream.Close();
+            textBox2.AppendText(Debug.Stream.ToString());
         }
 
         private void copyToolStripMenuItem_Click(object sender, EventArgs e)
@@ -61,22 +64,21 @@ namespace CSharpParser
 
     public static class Debug
     {
-        public static TextBox Output;
+        public static StringWriter Stream;
 
         public static void Write(string format, params object[] args)
         {
-            Output.AppendText(String.Format(format, args));
+            Stream.Write(format, args);
         }
 
         public static void WriteLine()
         {
-            Output.AppendText(Environment.NewLine);
+            Stream.WriteLine();
         }
 
         public static void WriteLine(string format, params object[] args)
         {
-            Write(format, args);
-            WriteLine();
+            Stream.WriteLine(format, args);
         }
 
         public static string Escape(string s)

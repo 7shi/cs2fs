@@ -23,6 +23,7 @@ namespace CSharpParser
         private static string[] noop;
         private Token[] tokens;
         private Token cur;
+        private Token last;
         private int pos;
         private string indent;
         private List<string> usings;
@@ -30,45 +31,54 @@ namespace CSharpParser
 
         public Converter(Token[] tokens)
         {
-            if (noop == null)
+            if (Converter.noop == null)
             {
-                noop = new[]
+                Converter.noop = new[]
                 {
                     "++", "--", "??", "?:","+=", "-=", "*=", "/=",
                     "%=", "&=", "|=", "^=", "<<=", ">>=", "=>", "?", ":"
                 };
             }
-            usings = new List<string>();
-            this.tokens = tokens.Where(t => !t.CanOmit).ToArray();
-            if (tokens.Length > 0) cur = tokens[0];
+            this.usings = new List<string>();
+            this.tokens = tokens.Where(delegate(Token t)
+            {
+                return !t.CanOmit;
+            }).ToArray();
+            this.last = new Token("", TokenType.None, 0, 0);
+            if (this.tokens.Length > 0)
+                this.cur = this.tokens[0];
+            else
+                this.cur = this.last;
         }
 
-        private bool MoveNext()
+        private void MoveNext()
         {
-            if (pos < tokens.Length)
+            if (this.pos < this.tokens.Length)
             {
-                pos++;
-                cur = pos < tokens.Length ? tokens[pos] : null;
+                this.pos = this.pos + 1;
+                if (this.pos < this.tokens.Length)
+                    this.cur = this.tokens[this.pos];
+                else
+                    this.cur = this.last;
             }
             else
-                cur = null;
-            return cur != null;
+                this.cur = this.last;
         }
 
         public void Convert()
         {
-            while (cur != null)
+            while (this.cur != this.last)
             {
-                switch (cur.Text)
+                switch (this.cur.Text)
                 {
                     case "using":
-                        usings.Add(ReadUsing());
+                        this.usings.Add(this.ReadUsing());
                         break;
                     case "namespace":
-                        ReadNamespace();
+                        this.ReadNamespace();
                         break;
                     default:
-                        throw Abort("syntax error");
+                        throw this.Abort("syntax error");
                 }
             }
         }
@@ -76,9 +86,13 @@ namespace CSharpParser
         private string ReadUsing()
         {
             var sw = new StringWriter();
-            while (MoveNext() && cur.Text != ";")
-                sw.Write(cur.Text);
-            MoveNext();
+            this.MoveNext();
+            while (this.cur.Text != ";")
+            {
+                sw.Write(this.cur.Text);
+                this.MoveNext();
+            }
+            this.MoveNext();
             sw.Close();
             return sw.ToString();
         }
@@ -86,117 +100,121 @@ namespace CSharpParser
         private void ReadNamespace()
         {
             Debug.Write("namespace ");
-            while (MoveNext() && cur.Text != "{")
-                Debug.Write(cur.Text);
+            this.MoveNext();
+            while (this.cur.Text != "{")
+            {
+                Debug.Write(this.cur.Text);
+                this.MoveNext();
+            }
             Debug.WriteLine();
-            if (usings.Count > 0)
+            if (this.usings.Count > 0)
             {
                 Debug.WriteLine();
-                foreach (var u in usings)
+                foreach (var u in this.usings)
                     Debug.WriteLine("open {0}", u);
             }
-            MoveNext();
-            while (cur != null && cur.Text != "}")
-                ReadNamespaceInternal("private");
-            MoveNext();
+            this.MoveNext();
+            while (this.cur != this.last && this.cur.Text != "}")
+                this.ReadNamespaceInternal("private");
+            this.MoveNext();
         }
 
         private void ReadNamespaceInternal(string access)
         {
-            if (IsAccess(cur.Text))
+            if (Converter.IsAccess(this.cur.Text))
             {
-                var acc = cur.Text;
-                MoveNext();
-                ReadNamespaceInternal(acc);
+                var acc = this.cur.Text;
+                this.MoveNext();
+                this.ReadNamespaceInternal(acc);
             }
-            else if (cur.Text == "class")
-                ReadClass(access);
-            else if (cur.Text == "enum")
-                ReadEnum(access);
+            else if (this.cur.Text == "class")
+                this.ReadClass(access);
+            else if (this.cur.Text == "enum")
+                this.ReadEnum(access);
             else
-                throw Abort("not supported");
+                throw this.Abort("not supported");
         }
 
         private void ReadEnum(string access)
         {
-            MoveNext();
-            string name = cur.Text;
-            MoveNext();
+            this.MoveNext();
+            var name = this.cur.Text;
+            this.MoveNext();
             Debug.WriteLine();
             Debug.Write("type ");
             if (access == "private") Debug.Write("private ");
             Debug.WriteLine("{0} =", name);
-            if (cur.Text != "{") throw Abort("must be '{'");
-            MoveNext();
-            int v = 0;
-            while (cur != null && cur.Text != "}")
+            if (this.cur.Text != "{") throw this.Abort("must be '{'");
+            this.MoveNext();
+            var v = 0;
+            while (this.cur != this.last && this.cur.Text != "}")
             {
-                var id = cur.Text;
-                MoveNext();
-                if (cur.Text == "=")
+                var id = this.cur.Text;
+                this.MoveNext();
+                if (this.cur.Text == "=")
                 {
-                    MoveNext();
-                    v = int.Parse(cur.Text);
-                    MoveNext();
+                    this.MoveNext();
+                    v = Int32.Parse(this.cur.Text);
+                    this.MoveNext();
                 }
                 Debug.WriteLine("    | {0} = {1}", id, v);
                 v = v + 1;
-                if (cur.Text == ",") MoveNext();
+                if (this.cur.Text == ",") this.MoveNext();
             }
-            MoveNext();
+            this.MoveNext();
         }
 
         private void ReadClass(string access)
         {
-            MoveNext();
-            string name = cur.Text;
-            MoveNext();
+            this.MoveNext();
+            var name = this.cur.Text;
+            this.MoveNext();
             Debug.WriteLine();
             Debug.Write("type ");
             if (access == "private") Debug.Write("private ");
             Debug.WriteLine("{0} =", name);
-            if (cur.Text == ":")
+            if (this.cur.Text == ":")
             {
-                throw Abort("inherit not supported");
+                throw this.Abort("inherit not supported");
             }
-            if (cur.Text != "{") throw Abort("must be '{'");
-            MoveNext();
-            while (cur != null && cur.Text != "}")
-                ReadMember("private", false);
-            MoveNext();
+            if (this.cur.Text != "{") throw this.Abort("must be '{'");
+            this.MoveNext();
+            while (this.cur != this.last && this.cur.Text != "}")
+                this.ReadMember("private", false);
+            this.MoveNext();
         }
 
         private void ReadMember(string access, bool isStatic)
         {
-            if (cur.Text == "static")
+            if (this.cur.Text == "static")
             {
-                MoveNext();
-                ReadMember(access, true);
+                this.MoveNext();
+                this.ReadMember(access, true);
             }
-            else if (IsAccess(cur.Text))
+            else if (Converter.IsAccess(this.cur.Text))
             {
-                var acc = cur.Text;
-                MoveNext();
-                ReadMember(acc, isStatic);
+                var acc = this.cur.Text;
+                this.MoveNext();
+                this.ReadMember(acc, isStatic);
             }
             else
             {
-                var tn = ReadDecl(false);
-                switch (cur.Text)
+                var tn = this.ReadDecl(false);
+                switch (this.cur.Text)
                 {
                     case "(":
-                        ReadMethod(tn.Name, tn.Type, access, isStatic);
+                        this.ReadMethod(tn.Name, tn.Type, access, isStatic);
                         break;
                     case ";":
-                        ReadField(tn.Name, tn.Type, access, isStatic);
+                        this.ReadField(tn.Name, tn.Type, access, isStatic);
                         break;
                     case "{":
-                        ReadProperty(tn.Name, tn.Type, access, isStatic);
+                        this.ReadProperty(tn.Name, tn.Type, access, isStatic);
                         break;
                     case "=":
-                        throw Abort("default value not supported");
+                        throw this.Abort("default value not supported");
                     default:
-                        throw Abort("syntax error");
+                        throw this.Abort("syntax error");
                 }
             }
         }
@@ -205,25 +223,25 @@ namespace CSharpParser
         {
             Debug.WriteLine();
             var autoField = false;
-            MoveNext();
-            while (cur.Text != "}")
+            this.MoveNext();
+            while (this.cur.Text != "}")
             {
                 var acc = access;
-                if (IsAccess(cur.Text))
+                if (Converter.IsAccess(this.cur.Text))
                 {
-                    acc = cur.Text;
-                    MoveNext();
+                    acc = this.cur.Text;
+                    this.MoveNext();
                 }
-                if (cur.Text == "get" || cur.Text == "set")
+                if (this.cur.Text == "get" || this.cur.Text == "set")
                 {
-                    var act = cur.Text;
-                    MoveNext();
-                    if (cur.Text == ";")
+                    var act = this.cur.Text;
+                    this.MoveNext();
+                    if (this.cur.Text == ";")
                     {
-                        MoveNext();
+                        this.MoveNext();
                         if (!autoField)
                         {
-                            MakeField("_" + name, t, "private", isStatic);
+                            this.MakeField("_" + name, t, "private", isStatic);
                             autoField = true;
                         }
                     }
@@ -240,22 +258,22 @@ namespace CSharpParser
                             Debug.WriteLine(" this._" + name);
                         else
                         {
-                            if (pos + 1 < tokens.Length && tokens[pos + 1].Text == "return")
+                            if (this.pos + 1 < this.tokens.Length && this.tokens[this.pos + 1].Text == "return")
                             {
-                                MoveNext();
-                                MoveNext();
+                                this.MoveNext();
+                                this.MoveNext();
                                 Debug.Write(" ");
-                                ReadExpr(false);
+                                this.ReadExpr(false);
                                 Debug.WriteLine();
-                                if (cur.Text != "}")
-                                    throw Abort("block not closed");
-                                MoveNext();
+                                if (this.cur.Text != "}")
+                                    throw this.Abort("block not closed");
+                                this.MoveNext();
                             }
                             else
                             {
                                 Debug.WriteLine();
-                                indent = new string(' ', 8);
-                                ReadBlock();
+                                this.indent = new string(' ', 8);
+                                this.ReadBlock();
                             }
                         }
                     }
@@ -267,24 +285,24 @@ namespace CSharpParser
                         else
                         {
                             Debug.WriteLine();
-                            indent = new string(' ', 8);
-                            ReadBlock();
+                            this.indent = new string(' ', 8);
+                            this.ReadBlock();
                         }
                     }
                 }
                 else
-                    throw Abort("syntax error");
+                    throw this.Abort("syntax error");
             }
-            MoveNext();
+            this.MoveNext();
         }
 
         private void ReadField(string name, string t, string access, bool isStatic)
         {
-            MoveNext();
-            MakeField(name, t, access, isStatic);
+            this.MoveNext();
+            this.MakeField(name, t, access, isStatic);
         }
 
-        private static void MakeField(string name, string t, string access, bool isStatic)
+        private void MakeField(string name, string t, string access, bool isStatic)
         {
             Debug.Write("    [<DefaultValue>] ");
             if (isStatic) Debug.Write("static ");
@@ -301,10 +319,10 @@ namespace CSharpParser
             if (t == null)
             {
                 // constructor
-                MoveNext();
+                this.MoveNext();
                 if (access == "private") Debug.Write("private ");
                 Debug.Write("new(");
-                ReadArgs();
+                this.ReadArgs();
                 Debug.Write(") ");
             }
             else
@@ -313,18 +331,18 @@ namespace CSharpParser
                 if (access == "private") Debug.Write("private ");
                 if (!isStatic) Debug.Write("this.");
                 Debug.Write(name + "(");
-                MoveNext();
-                ReadArgs();
+                this.MoveNext();
+                this.ReadArgs();
                 if (t == "void")
                     Debug.Write(") =");
                 else
                     Debug.Write(") : {0} =", t);
             }
-            if (cur.Text != "{") throw Abort("block required");
-            if (pos + 1 < tokens.Length && tokens[pos + 1].Text == "}")
+            if (this.cur.Text != "{") throw this.Abort("block required");
+            if (this.pos + 1 < this.tokens.Length && this.tokens[this.pos + 1].Text == "}")
             {
-                MoveNext();
-                MoveNext();
+                this.MoveNext();
+                this.MoveNext();
                 if (t == null)
                     Debug.WriteLine("= {{}}");
                 else
@@ -336,105 +354,107 @@ namespace CSharpParser
                     Debug.WriteLine("as this = {{}} then");
                 else
                     Debug.WriteLine();
-                indent = new string(' ', 8);
-                ReadBlock();
+                this.indent = new string(' ', 8);
+                this.ReadBlock();
             }
         }
 
         private void ReadArgs()
         {
-            while (cur.Text != ")")
+            while (this.cur.Text != ")")
             {
-                ReadArg();
-                if (cur.Text == ",")
+                this.ReadArg();
+                if (this.cur.Text == ",")
                 {
                     Debug.Write(", ");
-                    MoveNext();
+                    this.MoveNext();
                 }
             }
-            MoveNext();
+            this.MoveNext();
         }
 
         private TypeName ReadDecl(bool arg)
         {
             var list = new List<string>();
             var seps = "(){};=";
-            if (arg) seps += ",";
-            while (cur.Text.Length > 1 || seps.IndexOf(cur.Text) < 0)
+            if (arg) seps = seps + ",";
+            while (this.cur.Text.Length > 1 || seps.IndexOf(this.cur.Text) < 0)
             {
-                list.Add(cur.Text);
-                MoveNext();
+                list.Add(this.cur.Text);
+                this.MoveNext();
             }
             if (list.Count < 1)
-                throw Abort("missing type or name");
+                throw this.Abort("missing type or name");
             var last = list.Count - 1;
             var name = list[last];
             list.RemoveAt(last);
-            var t = list.Count > 0 ? ConvType(String.Concat(list)) : null;
-            return new TypeName(t, name);
+            if (list.Count > 0)
+                return new TypeName(Converter.ConvType(String.Concat(list)), name);
+            else
+                return new TypeName(null, name);
         }
 
         private void ReadArg()
         {
-            var tn = ReadDecl(true);
+            var tn = this.ReadDecl(true);
             if (tn.Type == null)
-                throw Abort("missing type or name");
+                throw this.Abort("missing type or name");
             Debug.Write(tn.Name + " : " + tn.Type);
         }
 
         private void ReadBlock()
         {
-            if (cur.Text != "{") throw Abort("block required");
-            MoveNext();
-            if (cur.Text == "}")
+            if (this.cur.Text != "{") throw this.Abort("block required");
+            this.MoveNext();
+            if (this.cur.Text == "}")
             {
-                Debug.Write(indent);
+                Debug.Write(this.indent);
                 Debug.WriteLine("()");
             }
             else
             {
-                while (cur != null && cur.Text != "}")
-                    ReadSentence();
+                while (this.cur != this.last && this.cur.Text != "}")
+                    this.ReadSentence();
             }
-            MoveNext();
+            this.MoveNext();
         }
 
         private void ReadSentence()
         {
-            switch (cur.Text)
+            switch (this.cur.Text)
             {
                 case "return":
-                    MoveNext();
-                    ReadSentence();
+                    this.MoveNext();
+                    this.ReadSentence();
                     break;
                 case "if":
-                    ReadIf();
+                    this.ReadIf();
                     break;
                 case "while":
-                    ReadWhile();
+                    this.ReadWhile();
                     break;
                 case "switch":
-                    ReadSwitch();
+                    this.ReadSwitch();
                     break;
                 case "foreach":
-                    ReadForEach();
+                    this.ReadForEach();
                     break;
                 case "continue":
                 case "break":
-                    throw Abort("not supported");
+                    throw this.Abort("not supported");
                 case "throw":
-                    MoveNext();
-                    Debug.Write(indent);
+                    this.MoveNext();
+                    Debug.Write(this.indent);
                     Debug.Write("raise <| ");
-                    ReadExpr(false);
+                    this.ReadExpr(false);
                     Debug.WriteLine();
                     break;
                 case "var":
-                    ReadVar();
+                    this.ReadVar();
                     break;
                 default:
-                    Debug.Write(indent);
-                    ReadExpr(false);
+                    Debug.Write(this.indent);
+                    this.ReadExpr(false);
                     Debug.WriteLine();
                     break;
             }
@@ -446,312 +466,312 @@ namespace CSharpParser
             if (array)
             {
                 seps = ",}";
-                if (seps.IndexOf(cur.Text) >= 0)
-                    throw Abort("element required");
+                if (seps.IndexOf(this.cur.Text) >= 0)
+                    throw this.Abort("element required");
             }
-            while (cur.Text.Length > 1 || seps.IndexOf(cur.Text) < 0)
+            while (this.cur.Text.Length > 1 || seps.IndexOf(this.cur.Text) < 0)
             {
-                var t = cur.Text;
+                var t = this.cur.Text;
                 if (t == "(")
                 {
-                    isNew = false;
-                    MoveNext();
+                    this.isNew = false;
+                    this.MoveNext();
                     Debug.Write("(");
-                    ReadExpr(false);
+                    this.ReadExpr(false);
                     Debug.Write(")");
                 }
                 else if (t == ",")
                 {
-                    MoveNext();
+                    this.MoveNext();
                     Debug.Write(", ");
                 }
                 else if (t == "new")
                 {
-                    MoveNext();
-                    if (cur.Text == "[")
-                        ReadArray();
+                    this.MoveNext();
+                    if (this.cur.Text == "[")
+                        this.ReadArray();
                     else
                     {
                         Debug.Write("new ");
-                        isNew = true;
+                        this.isNew = true;
                     }
                 }
                 else if (t == "delegate")
-                    ReadDelegate();
-                else if (t == "." || cur.Type != TokenType.Operator)
+                    this.ReadDelegate();
+                else if (t == "." || this.cur.Type != TokenType.Operator)
                 {
-                    MoveNext();
+                    this.MoveNext();
                     Debug.Write("{0}", t);
                 }
                 else if (t == "!")
                 {
-                    MoveNext();
+                    this.MoveNext();
                     Debug.Write("not ");
                 }
                 else if (t == "~")
                 {
-                    MoveNext();
+                    this.MoveNext();
                     Debug.Write("~~~");
                 }
-                else if (noop.Contains(t))
-                    throw Abort("not supported");
-                else if (isNew || t == "]")
+                else if (Converter.noop.Contains(t))
+                    throw this.Abort("not supported");
+                else if (this.isNew || t == "]")
                 {
-                    MoveNext();
+                    this.MoveNext();
                     Debug.Write(t);
                 }
                 else if (t == "[")
                 {
-                    MoveNext();
+                    this.MoveNext();
                     Debug.Write(".[");
                 }
                 else
                 {
-                    MoveNext();
-                    Debug.Write(" " + ConvOp(t) + " ");
+                    this.MoveNext();
+                    Debug.Write(" " + Converter.ConvOp(t) + " ");
                 }
             }
-            if (!array) MoveNext();
+            if (!array) this.MoveNext();
         }
 
         private void ReadBlockOrExpr()
         {
-            if (cur.Text == ";")
+            if (this.cur.Text == ";")
             {
-                MoveNext();
+                this.MoveNext();
                 Debug.Write("()");
             }
-            else if (cur.Text == "{")
-                ReadBlock();
+            else if (this.cur.Text == "{")
+                this.ReadBlock();
             else
-                ReadSentence();
+                this.ReadSentence();
         }
 
         private void ReadIf()
         {
-            MoveNext();
-            Debug.Write(indent);
+            this.MoveNext();
+            Debug.Write(this.indent);
             Debug.Write("if ");
-            ReadIfInternal();
+            this.ReadIfInternal();
         }
 
         private void ReadIfInternal()
         {
-            if (cur.Text != "(") throw Abort("must be '('");
-            MoveNext();
-            ReadExpr(false);
+            if (this.cur.Text != "(") throw this.Abort("must be '('");
+            this.MoveNext();
+            this.ReadExpr(false);
             Debug.WriteLine(" then");
-            var bak = indent;
-            indent += "    ";
-            ReadBlockOrExpr();
-            if (cur.Text == "else")
+            var bak = this.indent;
+            this.indent = this.indent + "    ";
+            this.ReadBlockOrExpr();
+            if (this.cur.Text == "else")
             {
-                MoveNext();
+                this.MoveNext();
                 Debug.Write(bak);
-                if (cur.Text == "if")
+                if (this.cur.Text == "if")
                 {
-                    indent = bak;
-                    MoveNext();
+                    this.indent = bak;
+                    this.MoveNext();
                     Debug.Write("elif ");
-                    ReadIfInternal();
+                    this.ReadIfInternal();
                 }
                 else
                 {
                     Debug.WriteLine("else");
-                    ReadBlockOrExpr();
-                    indent = bak;
+                    this.ReadBlockOrExpr();
+                    this.indent = bak;
                 }
             }
             else
-                indent = bak;
+                this.indent = bak;
         }
 
         private void ReadWhile()
         {
-            MoveNext();
-            Debug.Write(indent);
+            this.MoveNext();
+            Debug.Write(this.indent);
             Debug.Write("while ");
-            if (cur.Text != "(") throw Abort("must be '('");
-            MoveNext();
-            ReadExpr(false);
+            if (this.cur.Text != "(") throw this.Abort("must be '('");
+            this.MoveNext();
+            this.ReadExpr(false);
             Debug.Write(" do");
-            if (cur.Text == ";")
+            if (this.cur.Text == ";")
             {
-                MoveNext();
+                this.MoveNext();
                 Debug.WriteLine(" ()");
             }
             else
             {
                 Debug.WriteLine();
-                var bak = indent;
-                indent += "    ";
-                ReadBlockOrExpr();
-                indent = bak;
+                var bak = this.indent;
+                this.indent = this.indent + "    ";
+                this.ReadBlockOrExpr();
+                this.indent = bak;
             }
         }
 
         private void ReadForEach()
         {
-            MoveNext();
-            Debug.Write(indent);
-            if (cur.Text != "(") throw Abort("must be '('");
-            MoveNext();
-            if (cur.Text != "var") throw Abort("must be 'var'");
-            MoveNext();
-            Debug.Write("for {0} in ", cur.Text);
-            MoveNext();
-            if (cur.Text != "in") throw Abort("must be 'in'");
-            MoveNext();
-            ReadExpr(false);
+            this.MoveNext();
+            Debug.Write(this.indent);
+            if (this.cur.Text != "(") throw this.Abort("must be '('");
+            this.MoveNext();
+            if (this.cur.Text != "var") throw this.Abort("must be 'var'");
+            this.MoveNext();
+            Debug.Write("for {0} in ", this.cur.Text);
+            this.MoveNext();
+            if (this.cur.Text != "in") throw this.Abort("must be 'in'");
+            this.MoveNext();
+            this.ReadExpr(false);
             Debug.WriteLine(" do");
-            var bak = indent;
-            indent += "    ";
-            ReadBlockOrExpr();
-            indent = bak;
+            var bak = this.indent;
+            this.indent = this.indent + "    ";
+            this.ReadBlockOrExpr();
+            this.indent = bak;
         }
 
         private void ReadSwitch()
         {
-            MoveNext();
-            Debug.Write(indent);
+            this.MoveNext();
+            Debug.Write(this.indent);
             Debug.Write("match ");
-            if (cur.Text != "(") throw Abort("must be '('");
-            MoveNext();
-            ReadExpr(false);
+            if (this.cur.Text != "(") throw this.Abort("must be '('");
+            this.MoveNext();
+            this.ReadExpr(false);
             Debug.WriteLine(" with");
-            if (cur.Text != "{") throw Abort("must be '{'");
-            MoveNext();
-            while (cur.Text != "}")
+            if (this.cur.Text != "{") throw this.Abort("must be '{'");
+            this.MoveNext();
+            while (this.cur.Text != "}")
             {
-                if (cur.Text == "case")
+                if (this.cur.Text == "case")
                 {
-                    while (cur.Text == "case")
+                    while (this.cur.Text == "case")
                     {
-                        MoveNext();
-                        Debug.Write(indent);
+                        this.MoveNext();
+                        Debug.Write(this.indent);
                         Debug.Write("| ");
-                        ReadExpr(false);
-                        if (cur.Text != "case")
+                        this.ReadExpr(false);
+                        if (this.cur.Text != "case")
                             Debug.Write(" ->");
                         else
                             Debug.WriteLine();
                     }
-                    ReadCaseBlock();
+                    this.ReadCaseBlock();
                 }
-                else if (cur.Text == "default")
+                else if (this.cur.Text == "default")
                 {
-                    MoveNext();
-                    Debug.Write(indent);
+                    this.MoveNext();
+                    Debug.Write(this.indent);
                     Debug.Write("| _ ->");
-                    if (cur.Text != ":") throw Abort("must be ':'");
-                    MoveNext();
-                    ReadCaseBlock();
+                    if (this.cur.Text != ":") throw this.Abort("must be ':'");
+                    this.MoveNext();
+                    this.ReadCaseBlock();
                 }
                 else
-                    throw Abort("syntax error");
+                    throw this.Abort("syntax error");
             }
-            MoveNext();
+            this.MoveNext();
         }
 
         private void ReadCaseBlock()
         {
-            if (cur.Text == "break")
+            if (this.cur.Text == "break")
             {
                 Debug.WriteLine(" ()");
-                MoveNext();
-                if (cur.Text != ";") throw Abort("must be ';'");
-                MoveNext();
+                this.MoveNext();
+                if (this.cur.Text != ";") throw this.Abort("must be ';'");
+                this.MoveNext();
             }
             else
             {
                 Debug.WriteLine();
-                var bak = indent;
-                indent += "    ";
-                while (cur.Text != "break" && cur.Text != "return" && cur.Text != "throw")
-                    ReadSentence();
-                if (cur.Text == "return")
+                var bak = this.indent;
+                this.indent = this.indent + "    ";
+                while (this.cur.Text != "break" && this.cur.Text != "return" && this.cur.Text != "throw")
+                    this.ReadSentence();
+                if (this.cur.Text == "return")
                 {
-                    MoveNext();
-                    ReadSentence();
+                    this.MoveNext();
+                    this.ReadSentence();
                 }
-                else if (cur.Text == "throw")
+                else if (this.cur.Text == "throw")
                 {
-                    MoveNext();
-                    Debug.Write(indent);
+                    this.MoveNext();
+                    Debug.Write(this.indent);
                     Debug.Write("raise <| ");
-                    ReadExpr(false);
+                    this.ReadExpr(false);
                     Debug.WriteLine();
                 }
                 else
                 {
-                    MoveNext();
-                    if (cur.Text != ";") throw Abort("must be ';'");
-                    MoveNext();
+                    this.MoveNext();
+                    if (this.cur.Text != ";") throw this.Abort("must be ';'");
+                    this.MoveNext();
                 }
-                indent = bak;
+                this.indent = bak;
             }
         }
 
         private void ReadVar()
         {
-            MoveNext();
-            if (cur.Type != TokenType.Any) throw Abort("name required");
-            Debug.Write(indent);
-            Debug.Write("let mutable {0} = ", cur.Text);
-            MoveNext();
-            if (cur.Text != "=") throw Abort("must be '='");
-            MoveNext();
-            ReadExpr(false);
+            this.MoveNext();
+            if (this.cur.Type != TokenType.Any) throw this.Abort("name required");
+            Debug.Write(this.indent);
+            Debug.Write("let mutable {0} = ", this.cur.Text);
+            this.MoveNext();
+            if (this.cur.Text != "=") throw this.Abort("must be '='");
+            this.MoveNext();
+            this.ReadExpr(false);
             Debug.WriteLine();
         }
 
         private void ReadDelegate()
         {
-            MoveNext();
-            if (cur.Text != "(") throw Abort("argument required");
-            MoveNext();
+            this.MoveNext();
+            if (this.cur.Text != "(") throw this.Abort("argument required");
+            this.MoveNext();
             Debug.Write("(fun");
-            while (cur.Text != ")")
+            while (this.cur.Text != ")")
             {
-                var tn = ReadDecl(true);
+                var tn = this.ReadDecl(true);
                 Debug.Write(" ({0} : {1})", tn.Name, tn.Type);
-                if (cur.Text == ",") MoveNext();
+                if (this.cur.Text == ",") this.MoveNext();
             }
-            MoveNext();
+            this.MoveNext();
             Debug.WriteLine(" ->");
-            var bak = indent;
-            indent = indent + "    ";
-            ReadBlock();
-            indent = bak;
-            Debug.Write(indent);
+            var bak = this.indent;
+            this.indent = this.indent + "    ";
+            this.ReadBlock();
+            this.indent = bak;
+            Debug.Write(this.indent);
             Debug.Write(")");
         }
 
         private void ReadArray()
         {
-            MoveNext();
-            if (cur.Text != "]") throw Abort("must be ']'");
-            MoveNext();
-            if (cur.Text != "{") throw Abort("must be '{'");
-            MoveNext();
+            this.MoveNext();
+            if (this.cur.Text != "]") throw this.Abort("must be ']'");
+            this.MoveNext();
+            if (this.cur.Text != "{") throw this.Abort("must be '{'");
+            this.MoveNext();
             Debug.Write("[| ");
-            while (cur.Text != "}")
+            while (this.cur.Text != "}")
             {
-                ReadExpr(true);
-                if (cur.Text == ",")
+                this.ReadExpr(true);
+                if (this.cur.Text == ",")
                 {
-                    MoveNext();
-                    if (cur.Text != "}") Debug.Write("; ");
+                    this.MoveNext();
+                    if (this.cur.Text != "}") Debug.Write("; ");
                 }
             }
-            MoveNext();
+            this.MoveNext();
             Debug.Write(" |]");
         }
 
         private Exception Abort(string message)
         {
             return new Exception(String.Format(
-                "[{0}, {1}] {2}: {3}", cur.Line, cur.Column, message, cur.Text));
+                "[{0}, {1}] {2}: {3}", this.cur.Line, this.cur.Column, message, this.cur.Text));
         }
 
         public static string ConvType(string t)
