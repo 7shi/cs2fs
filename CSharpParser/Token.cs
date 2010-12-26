@@ -9,7 +9,6 @@ namespace CSharpParser
     public enum TokenType
     {
         None,
-        Error,
         Space,
         NewLine,
         Any,
@@ -82,6 +81,24 @@ namespace CSharpParser
                      || Type == TokenType.Comment
                      || Type == TokenType.Comment1;
             }
+        }
+
+        public void Write(TextWriter tw)
+        {
+            tw.Write("[{0}, {1}] {2}: ", Line, Column, Type);
+            switch (Type)
+            {
+                case TokenType.Space:
+                    tw.WriteLine("{0}", Align(4).Length);
+                    break;
+                case TokenType.NewLine:
+                    tw.WriteLine(Text.Replace("\r", "\\r").Replace("\n", "\\n"));
+                    break;
+                default:
+                    tw.WriteLine(Text);
+                    break;
+            }
+
         }
     }
 }

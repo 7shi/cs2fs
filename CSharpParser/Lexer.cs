@@ -132,10 +132,7 @@ namespace CSharpParser
             var list = new List<Token>();
             while (Read())
                 list.Add(new Token(Token, Type, Line, Column));
-            if (Type == TokenType.Error)
-                return null;
-            else
-                return list.ToArray();
+            return list.ToArray();
         }
 
         public bool Read()
@@ -150,94 +147,84 @@ namespace CSharpParser
                 Type = TokenType.None;
                 return false;
             }
-
-            if (cur == ' ' || cur == '\t')
-            {
-                while (MoveNext() && IsSpace(cur)) ;
-                SetResult(TokenType.Space);
-                return true;
-            }
-            else if (cur == '\r')
-            {
-                if (MoveNext())
-                {
-                    if (cur == '\n') MoveNext();
-                }
-                clm = 1;
-                lin++;
-                SetResult(TokenType.NewLine);
-                return true;
-            }
-            else if (cur == '\n')
-            {
-                MoveNext();
-                clm = 1;
-                lin++;
-                Token = "\n";
-                Type = TokenType.NewLine;
-                return true;
-            }
-            else if (cur == ';')
-            {
-                MoveNext();
-                Token = ";";
-                Type = TokenType.Separator;
-                return true;
-            }
-            else if (cur == '\'')
-                return ReadChar();
-            else if (cur == '"')
-                return ReadString();
-            else if (cur == '{')
-            {
-                MoveNext();
-                Token = "{";
-                Type = TokenType.BeginBlock;
-                return true;
-            }
-            else if (cur == '}')
-            {
-                MoveNext();
-                Token = "}";
-                Type = TokenType.EndBlock;
-                return true;
-            }
-            else if (cur == ',')
-            {
-                MoveNext();
-                Token = ",";
-                Type = TokenType.Comma;
-                return true;
-            }
-            else if (cur == '/' && IsBeginComment())
-                return ReadComment();
-            else if (char.IsNumber(cur))
-                return ReadNumber();
-            else if (IsFirstLetter(cur))
-            {
-                while (MoveNext() && IsLetter(cur)) ;
-                Token = src.Substring(Position, pos - Position);
-                Type = KwStrs.ContainsKey(Token) ? TokenType.Keyword : TokenType.Any;
-                return true;
-            }
             else
             {
-                var op = GetOperator();
-                if (op != "")
+                if (cur == ' ' || cur == '\t')
                 {
-                    pos += op.Length;
-                    clm += op.Length;
-                    cur = pos < src.Length ? src[pos] : '\0';
-                    Token = op;
-                    Type = TokenType.Operator;
-                    return true;
+                    while (MoveNext() && IsSpace(cur)) ;
+                    SetResult(TokenType.Space);
+                }
+                else if (cur == '\r')
+                {
+                    if (MoveNext())
+                    {
+                        if (cur == '\n') MoveNext();
+                    }
+                    clm = 1;
+                    lin++;
+                    SetResult(TokenType.NewLine);
+                }
+                else if (cur == '\n')
+                {
+                    MoveNext();
+                    clm = 1;
+                    lin++;
+                    Token = "\n";
+                    Type = TokenType.NewLine;
+                }
+                else if (cur == ';')
+                {
+                    MoveNext();
+                    Token = ";";
+                    Type = TokenType.Separator;
+                }
+                else if (cur == '\'')
+                    ReadChar();
+                else if (cur == '"')
+                    ReadString();
+                else if (cur == '{')
+                {
+                    MoveNext();
+                    Token = "{";
+                    Type = TokenType.BeginBlock;
+                }
+                else if (cur == '}')
+                {
+                    MoveNext();
+                    Token = "}";
+                    Type = TokenType.EndBlock;
+                }
+                else if (cur == ',')
+                {
+                    MoveNext();
+                    Token = ",";
+                    Type = TokenType.Comma;
+                }
+                else if (cur == '/' && IsBeginComment())
+                    ReadComment();
+                else if (char.IsNumber(cur))
+                    ReadNumber();
+                else if (IsFirstLetter(cur))
+                {
+                    while (MoveNext() && IsLetter(cur)) ;
+                    Token = src.Substring(Position, pos - Position);
+                    Type = KwStrs.ContainsKey(Token) ? TokenType.Keyword : TokenType.Any;
                 }
                 else
                 {
-                    MoveNext();
-                    Error("invalid character");
-                    return false;
+                    var op = GetOperator();
+                    if (op != "")
+                    {
+                        pos += op.Length;
+                        clm += op.Length;
+                        cur = pos < src.Length ? src[pos] : '\0';
+                        Token = op;
+                        Type = TokenType.Operator;
+                    }
+                    else
+                        throw new Exception("invalid character");
                 }
+                return true;
             }
         }
 
@@ -280,32 +267,25 @@ namespace CSharpParser
                 return false;
         }
 
-        private bool ReadComment()
+        private void ReadComment()
         {
             MoveNext();
             if (cur == '/')
             {
                 while (MoveNext() && !IsNewLine(cur)) ;
                 SetResult(TokenType.Comment1);
-                return true;
             }
             else
             {
                 while (MoveNext() && !IsEndComment()) ;
                 if (MoveNext() && MoveNext())
-                {
                     SetResult(TokenType.Comment);
-                    return true;
-                }
                 else
-                {
-                    Error("unterminated comment");
-                    return false;
-                }
+                    throw Abort("unterminated comment");
             }
         }
 
-        private bool ReadString()
+        private void ReadString()
         {
             while (MoveNext() && cur != '"')
             {
@@ -315,16 +295,12 @@ namespace CSharpParser
             {
                 MoveNext();
                 SetResult(TokenType.String);
-                return true;
             }
             else
-            {
-                Error("unterminated string");
-                return false;
-            }
+                throw Abort("unterminated string");
         }
 
-        private bool ReadChar()
+        private void ReadChar()
         {
             if (MoveNext())
             {
@@ -333,19 +309,12 @@ namespace CSharpParser
                 {
                     MoveNext();
                     SetResult(TokenType.Char);
-                    return true;
                 }
                 else
-                {
-                    Error("unterminated character");
-                    return false;
-                }
+                    throw Abort("unterminated character");
             }
             else
-            {
-                Error("unterminated character");
-                return false;
-            }
+                throw Abort("unterminated character");
         }
 
         private string GetOperator()
@@ -365,7 +334,7 @@ namespace CSharpParser
             }
         }
 
-        private bool ReadNumber()
+        private void ReadNumber()
         {
             while (MoveNext() && char.IsNumber(cur)) ;
             if (cur == '.')
@@ -393,7 +362,6 @@ namespace CSharpParser
                 else
                     SetResult(TokenType.Int);
             }
-            return true;
         }
 
         private void ReadFloat()
@@ -414,10 +382,9 @@ namespace CSharpParser
                 SetResult(TokenType.Double);
         }
 
-        private void Error(string message)
+        private Exception Abort(string message)
         {
-            SetResult(TokenType.Error);
-            Debug.WriteLine(string.Format(
+            return new Exception(string.Format(
                 "[{0},{1}] {2}: {3}", Line, Column, message, Token));
         }
     }

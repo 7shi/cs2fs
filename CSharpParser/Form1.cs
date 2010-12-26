@@ -34,46 +34,22 @@ namespace CSharpParser
         {
             Debug.Output = textBox2;
             textBox2.Clear();
-            var lex = new Lexer(textBox1.Text);
-            var tokens = lex.ReadAllTokens();
-            if (tokens != null)
-            {
-#if true
-                var conv = new Converter(tokens);
-#  if DEBUG
-                conv.Convert();
-#  else
-                try
-                {
-                    conv.Convert();
-                }
-                catch (Exception ex)
-                {
-                    textBox2.AppendText("\r\n" + ex.Message + "\r\n");
-                }
-#  endif
-#else
-                var sw = new StringWriter();
-                foreach (var token in tokens)
-                {
-                    sw.Write("[{0}, {1}] {2}: ", token.Line, token.Column, token.Type);
-                    switch (token.Type)
-                    {
-                        case TokenType.Space:
-                            sw.WriteLine("{0}", token.Align(4).Length);
-                            break;
-                        case TokenType.NewLine:
-                            sw.WriteLine(Debug.Escape(token.Text));
-                            break;
-                        default:
-                            sw.WriteLine(token.Text);
-                            break;
-                    }
-                }
-                sw.Close();
-                textBox2.Text = sw.ToString();
+
+#if !DEBUG
+            try
 #endif
+            {
+                var lex = new Lexer(textBox1.Text);
+                var tokens = lex.ReadAllTokens();
+                var conv = new Converter(tokens);
+                conv.Convert();
             }
+#if !DEBUG
+            catch (Exception ex)
+            {
+                textBox2.AppendText("\r\n" + ex.Message + "\r\n");
+            }
+#endif
         }
     }
 
