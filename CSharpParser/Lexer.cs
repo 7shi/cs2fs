@@ -8,7 +8,13 @@ namespace CSharpParser
 {
     public class Lexer
     {
-        private int clm, lin, pos;
+        private static string[] Operators;
+        private static Dictionary<char, string[]> OpDic;
+        private static string OpHeads;
+
+        private int clm;
+        private int lin;
+        private int pos;
         private char cur;
         private string src;
 
@@ -18,208 +24,172 @@ namespace CSharpParser
         public string Token { get; private set; }
         public TokenType Type { get; private set; }
 
-        public static readonly string[] Operators =
-        {
-            ".", "(", ")", "[", "]", "++", "--", "->",
-            "+", "-", "!", "~", "&", "*", "/", "%",
-            "<<", ">>", "<", ">", "<=", ">=", "==", "!=",
-            "^", "|", "&&", "||", "??", "?:", "=", "+=",
-            "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=",
-            ">>=", "=>", "?", ":"
-        };
-
-        public static readonly string[] Keywords =
-        {
-            "abstract", "as", "base", "bool", "break", "byte", "case", "catch",
-            "char", "checked", "class", "const", "continue", "decimal", "default", "delegate",
-            "do", "double", "else", "enum", "event", "explicit", "extern", "false",
-            "finally", "fixed", "float", "for", "foreach", "goto", "if", "implicit",
-            "in", "int", "interface", "internal", "is", "lock", "long", "namespace",
-            "new", "null", "object", "operator", "out", "override", "params", "private",
-            "protected", "public", "readonly", "ref", "return", "sbyte", "sealed", "short",
-            "sizeof", "stackalloc", "static", "string", "struct", "switch", "this", "throw",
-            "true", "try", "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort",
-            "using", "virtual", "void", "volatile", "while"
-        };
-
-        private static readonly Dictionary<char, string[]> OpDic = new Func<Dictionary<char, string[]>>(() =>
-        {
-            var dic = new Dictionary<char, List<string>>();
-            foreach (var op in Operators)
-            {
-                List<string> list;
-                if (!dic.TryGetValue(op[0], out list))
-                {
-                    list = new List<string>();
-                    dic[op[0]] = list;
-                }
-                list.Add(op);
-            }
-            var keys = new List<char>(dic.Keys);
-            keys.Sort();
-            var ret = new Dictionary<char, string[]>();
-            for (int i = 0; i < keys.Count; i++)
-            {
-                var key = keys[i];
-                var list = dic[key];
-                list.Sort((a, b) =>
-                {
-                    if (a.Length == b.Length)
-                        return a.CompareTo(b);
-                    else
-                        return b.Length - a.Length;
-                });
-                ret[key] = list.ToArray();
-            }
-            return ret;
-        })();
-
-        private static readonly string OpHeads = new Func<string>(() =>
-        {
-            var keys = new List<char>(OpDic.Keys);
-            keys.Sort();
-            return string.Concat(keys);
-        })();
-
-        private static readonly Dictionary<string, int> KwStrs = new Func<Dictionary<string, int>>(() =>
-        {
-            var ret = new Dictionary<string, int>();
-            foreach (var op in Keywords)
-                ret[op] = 0;
-            return ret;
-        })();
-
         public Lexer(string src)
         {
+            if (Lexer.Operators == null)
+            {
+                Lexer.Operators = new[]
+                {
+                    ".", "(", ")", "[", "]", "++", "--", "->",
+                    "+", "-", "!", "~", "&", "*", "/", "%",
+                    "<<", ">>", "<", ">", "<=", ">=", "==", "!=",
+                    "^", "|", "&&", "||", "??", "?:", "=", "+=",
+                    "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=",
+                    ">>=", "=>", "?", ":"
+                };
+
+                var dic = new Dictionary<char, List<string>>();
+                foreach (var op in Lexer.Operators)
+                {
+                    if (dic.ContainsKey(op[0]))
+                        dic[op[0]].Add(op);
+                    else
+                    {
+                        var list = new List<string>();
+                        dic[op[0]] = list;
+                        list.Add(op);
+                    }
+                }
+                var keys = new List<char>(dic.Keys);
+                keys.Sort();
+                Lexer.OpHeads = String.Concat(keys);
+                Lexer.OpDic = new Dictionary<char, string[]>();
+                foreach (var i in Enumerable.Range(0, keys.Count))
+                {
+                    var key = keys[i];
+                    var list = dic[key];
+                    list.Sort(delegate(string a, string b)
+                    {
+                        if (a.Length == b.Length)
+                            return a.CompareTo(b);
+                        else
+                            return b.Length - a.Length;
+                    });
+                    Lexer.OpDic[key] = list.ToArray();
+                }
+            }
+
             this.src = src;
-            clm = 1;
-            lin = 1;
-            if (src.Length > 0) cur = src[0];
+            this.clm = 1;
+            this.lin = 1;
+            if (src.Length > 0) this.cur = src[0];
         }
 
-        private bool MoveNext()
+        private void MoveNext()
         {
-            if (pos < src.Length)
+            if (this.pos < this.src.Length)
             {
-                pos++;
-                clm++;
-                if (pos < src.Length)
-                {
-                    cur = src[pos];
-                    return true;
-                }
+                this.pos = this.pos + 1;
+                this.clm = this.clm + 1;
+                if (this.pos < this.src.Length)
+                    this.cur = this.src[this.pos];
                 else
-                {
-                    cur = '\0';
-                    return false;
-                }
+                    this.cur = (char)0;
             }
             else
-            {
-                cur = '\0';
-                return false;
-            }
+                this.cur = (char)0;
         }
 
-        private void SetResult(TokenType type)
+        private void SetResult(TokenType t)
         {
-            Token = src.Substring(Position, pos - Position);
-            Type = type;
+            this.Token = this.src.Substring(this.Position, this.pos - this.Position);
+            this.Type = t;
         }
 
         public Token[] ReadAllTokens()
         {
             var list = new List<Token>();
-            while (Read())
-                list.Add(new Token(Token, Type, Line, Column));
+            while (this.Read())
+                list.Add(new Token(this.Token, this.Type, this.Line, this.Column));
             return list.ToArray();
         }
 
         public bool Read()
         {
-            Column = clm;
-            Line = lin;
-            Position = pos;
+            this.Column = this.clm;
+            this.Line = this.lin;
+            this.Position = this.pos;
 
-            if (src == null || pos >= src.Length)
+            if (this.src == null || this.pos >= this.src.Length)
             {
-                Token = "";
-                Type = TokenType.None;
+                this.Token = "";
+                this.Type = TokenType.None;
                 return false;
             }
             else
             {
-                if (cur == ' ' || cur == '\t')
+                if (this.cur == ' ' || this.cur == '\t')
                 {
-                    while (MoveNext() && IsSpace(cur)) ;
-                    SetResult(TokenType.Space);
+                    while (Lexer.IsSpace(this.cur)) this.MoveNext();
+                    this.SetResult(TokenType.Space);
                 }
-                else if (cur == '\r')
+                else if (this.cur == '\r')
                 {
-                    if (MoveNext())
-                    {
-                        if (cur == '\n') MoveNext();
-                    }
-                    clm = 1;
-                    lin++;
-                    SetResult(TokenType.NewLine);
+                    this.MoveNext();
+                    if (this.cur == '\n') this.MoveNext();
+                    this.clm = 1;
+                    this.lin = this.lin + 1;
+                    this.SetResult(TokenType.NewLine);
                 }
-                else if (cur == '\n')
+                else if (this.cur == '\n')
                 {
-                    MoveNext();
-                    clm = 1;
-                    lin++;
-                    Token = "\n";
-                    Type = TokenType.NewLine;
+                    this.MoveNext();
+                    this.clm = 1;
+                    this.lin = this.lin + 1;
+                    this.Token = "\n";
+                    this.Type = TokenType.NewLine;
                 }
-                else if (cur == ';')
+                else if (this.cur == ';')
                 {
-                    MoveNext();
-                    Token = ";";
-                    Type = TokenType.Separator;
+                    this.MoveNext();
+                    this.Token = ";";
+                    this.Type = TokenType.Separator;
                 }
-                else if (cur == '\'')
-                    ReadChar();
-                else if (cur == '"')
-                    ReadString();
-                else if (cur == '{')
+                else if (this.cur == '\'')
+                    this.ReadChar();
+                else if (this.cur == '"')
+                    this.ReadString();
+                else if (this.cur == '{')
                 {
-                    MoveNext();
-                    Token = "{";
-                    Type = TokenType.BeginBlock;
+                    this.MoveNext();
+                    this.Token = "{";
+                    this.Type = TokenType.BeginBlock;
                 }
-                else if (cur == '}')
+                else if (this.cur == '}')
                 {
-                    MoveNext();
-                    Token = "}";
-                    Type = TokenType.EndBlock;
+                    this.MoveNext();
+                    this.Token = "}";
+                    this.Type = TokenType.EndBlock;
                 }
-                else if (cur == ',')
+                else if (this.cur == ',')
                 {
-                    MoveNext();
-                    Token = ",";
-                    Type = TokenType.Comma;
+                    this.MoveNext();
+                    this.Token = ",";
+                    this.Type = TokenType.Comma;
                 }
-                else if (cur == '/' && IsBeginComment())
-                    ReadComment();
-                else if (char.IsNumber(cur))
-                    ReadNumber();
-                else if (IsFirstLetter(cur))
+                else if (this.cur == '/' && this.IsBeginComment())
+                    this.ReadComment();
+                else if (Char.IsNumber(this.cur))
+                    this.ReadNumber();
+                else if (Lexer.IsFirstLetter(this.cur))
                 {
-                    while (MoveNext() && IsLetter(cur)) ;
-                    Token = src.Substring(Position, pos - Position);
-                    Type = KwStrs.ContainsKey(Token) ? TokenType.Keyword : TokenType.Any;
+                    while (Lexer.IsLetter(this.cur)) this.MoveNext();
+                    this.Token = this.src.Substring(this.Position, this.pos - this.Position);
+                    this.Type = TokenType.Any;
                 }
                 else
                 {
-                    var op = GetOperator();
+                    var op = this.GetOperator();
                     if (op != "")
                     {
-                        pos += op.Length;
-                        clm += op.Length;
-                        cur = pos < src.Length ? src[pos] : '\0';
-                        Token = op;
-                        Type = TokenType.Operator;
+                        this.pos = this.pos + op.Length;
+                        this.clm = this.clm + op.Length;
+                        if (this.pos < this.src.Length)
+                            this.cur = this.src[this.pos];
+                        else
+                            this.cur = (char)0;
+                        this.Token = op;
+                        this.Type = TokenType.Operator;
                     }
                     else
                         throw new Exception("invalid character");
@@ -240,7 +210,7 @@ namespace CSharpParser
 
         public static bool IsLetter(char ch)
         {
-            return IsFirstLetter(ch) || char.IsNumber(ch);
+            return Lexer.IsFirstLetter(ch) || Char.IsNumber(ch);
         }
 
         public static bool IsNewLine(char ch)
@@ -250,10 +220,10 @@ namespace CSharpParser
 
         private bool IsBeginComment()
         {
-            if (pos + 1 < src.Length)
+            if (this.pos + 1 < this.src.Length)
             {
-                var ch = src[pos + 1];
-                return cur == '/' && (ch == '/' || ch == '*');
+                var ch = this.src[this.pos + 1];
+                return this.cur == '/' && (ch == '/' || ch == '*');
             }
             else
                 return false;
@@ -261,73 +231,76 @@ namespace CSharpParser
 
         private bool IsEndComment()
         {
-            if (pos + 1 < src.Length)
-                return cur == '*' && src[pos + 1] == '/';
+            if (this.pos + 1 < this.src.Length)
+                return this.cur == '*' && this.src[this.pos + 1] == '/';
             else
                 return false;
         }
 
         private void ReadComment()
         {
-            MoveNext();
-            if (cur == '/')
+            this.MoveNext();
+            if (this.cur == '/')
             {
-                while (MoveNext() && !IsNewLine(cur)) ;
-                SetResult(TokenType.Comment1);
+                while (!(Lexer.IsNewLine(this.cur))) this.MoveNext();
+                this.SetResult(TokenType.Comment1);
             }
             else
             {
-                while (MoveNext() && !IsEndComment()) ;
-                if (MoveNext() && MoveNext())
-                    SetResult(TokenType.Comment);
+                while (!(this.IsEndComment())) this.MoveNext();
+                if (this.IsEndComment())
+                {
+                    this.MoveNext();
+                    this.MoveNext();
+                    this.SetResult(TokenType.Comment);
+                }
                 else
-                    throw Abort("unterminated comment");
+                    throw this.Abort("unterminated comment");
             }
         }
 
         private void ReadString()
         {
-            while (MoveNext() && cur != '"')
+            this.MoveNext();
+            while (this.cur != '"')
             {
-                if (cur == '\\') MoveNext();
+                if (this.cur == '\\') this.MoveNext();
+                this.MoveNext();
             }
-            if (cur == '"')
+            if (this.cur == '"')
             {
-                MoveNext();
-                SetResult(TokenType.String);
+                this.MoveNext();
+                this.SetResult(TokenType.String);
             }
             else
-                throw Abort("unterminated string");
+                throw this.Abort("unterminated string");
         }
 
         private void ReadChar()
         {
-            if (MoveNext())
+            this.MoveNext();
+            if (this.cur == '\\') this.MoveNext();
+            this.MoveNext();
+            if (this.cur == '\'')
             {
-                if (cur == '\\') MoveNext();
-                if (MoveNext() && cur == '\'')
-                {
-                    MoveNext();
-                    SetResult(TokenType.Char);
-                }
-                else
-                    throw Abort("unterminated character");
+                this.MoveNext();
+                this.SetResult(TokenType.Char);
             }
             else
-                throw Abort("unterminated character");
+                throw this.Abort("unterminated character");
         }
 
         private string GetOperator()
         {
-            if (!OpHeads.Contains(cur))
+            if (!(Lexer.OpHeads.Contains(this.cur)))
                 return "";
             else
             {
-                int max = src.Length - pos;
+                var max = this.src.Length - this.pos;
                 var ret = "";
-                foreach (var op in OpDic[cur])
+                foreach (var op in Lexer.OpDic[this.cur])
                 {
-                    if (ret == "" && op.Length <= max && src.Substring(pos, op.Length) == op)
+                    if (ret == "" && op.Length <= max && this.src.Substring(this.pos, op.Length) == op)
                         ret = op;
                 }
                 return ret;
@@ -336,56 +309,57 @@ namespace CSharpParser
 
         private void ReadNumber()
         {
-            while (MoveNext() && char.IsNumber(cur)) ;
-            if (cur == '.')
-                ReadFloat();
+            while (Char.IsNumber(this.cur)) this.MoveNext();
+            if (this.cur == '.')
+                this.ReadFloat();
             else
             {
-                var ch2 = char.ToLower(cur);
+                var ch2 = Char.ToLower(this.cur);
                 if (ch2 == 'u')
                 {
-                    if (MoveNext() && char.ToLower(cur) == 'l')
+                    this.MoveNext();
+                    if (Char.ToLower(this.cur) == 'l')
                     {
-                        MoveNext();
-                        SetResult(TokenType.ULong);
+                        this.MoveNext();
+                        this.SetResult(TokenType.ULong);
                     }
                     else
                     {
-                        SetResult(TokenType.UInt);
+                        this.SetResult(TokenType.UInt);
                     }
                 }
                 else if (ch2 == 'l')
                 {
-                    MoveNext();
-                    SetResult(TokenType.Long);
+                    this.MoveNext();
+                    this.SetResult(TokenType.Long);
                 }
                 else
-                    SetResult(TokenType.Int);
+                    this.SetResult(TokenType.Int);
             }
         }
 
         private void ReadFloat()
         {
-            while (MoveNext() && char.IsNumber(cur)) ;
-            var ch2 = char.ToLower(cur);
+            while (Char.IsNumber(this.cur)) this.MoveNext();
+            var ch2 = Char.ToLower(this.cur);
             if (ch2 == 'f')
             {
-                MoveNext();
-                SetResult(TokenType.Float);
+                this.MoveNext();
+                this.SetResult(TokenType.Float);
             }
             else if (ch2 == 'd')
             {
-                MoveNext();
-                SetResult(TokenType.Double);
+                this.MoveNext();
+                this.SetResult(TokenType.Double);
             }
             else
-                SetResult(TokenType.Double);
+                this.SetResult(TokenType.Double);
         }
 
         private Exception Abort(string message)
         {
-            return new Exception(string.Format(
-                "[{0},{1}] {2}: {3}", Line, Column, message, Token));
+            return new Exception(String.Format(
+                "[{0},{1}] {2}: {3}", this.Line, this.Column, message, this.Token));
         }
     }
 }

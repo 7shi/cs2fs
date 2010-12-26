@@ -17,7 +17,7 @@ namespace CSharpParser
             InitializeComponent();
 
             var dir = Path.GetDirectoryName(Application.ExecutablePath);
-            var sample = Path.Combine(dir, "Token.cs");
+            var sample = Path.Combine(dir, "Lexer.cs");
             try
             {
                 textBox1.Text = File.ReadAllText(sample);
@@ -35,7 +35,7 @@ namespace CSharpParser
             Debug.Output = textBox2;
             textBox2.Clear();
 
-#if !DEBUG
+#if DEBUG
             try
 #endif
             {
@@ -44,7 +44,7 @@ namespace CSharpParser
                 var conv = new Converter(tokens);
                 conv.Convert();
             }
-#if !DEBUG
+#if DEBUG
             catch (Exception ex)
             {
                 textBox2.AppendText("\r\n" + ex.Message + "\r\n");
@@ -65,7 +65,7 @@ namespace CSharpParser
 
         public static void Write(string format, params object[] args)
         {
-            Output.AppendText(string.Format(format, args));
+            Output.AppendText(String.Format(format, args));
         }
 
         public static void WriteLine()

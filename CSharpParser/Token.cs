@@ -14,7 +14,6 @@ namespace CSharpParser
         Any,
         Operator,
         Separator,
-        Keyword,
         Int,
         UInt,
         Long,
