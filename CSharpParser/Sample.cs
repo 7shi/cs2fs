@@ -46,4 +46,9 @@ namespace TestApp
             }
         }
     }
+
+    public enum Color
+    {
+        Red, Green, Blue
+    }
 }

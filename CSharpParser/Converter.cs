@@ -75,17 +75,51 @@ namespace CSharpParser
             }
             MoveNext();
             while (cur != null && cur.Text != "}")
+                ReadNamespaceInternal("private");
+            MoveNext();
+        }
+
+        private void ReadNamespaceInternal(string access)
+        {
+            if (IsAccess(cur.Text))
             {
-                if (IsAccess(cur.Text))
+                var acc = cur.Text;
+                MoveNext();
+                ReadNamespaceInternal(acc);
+            }
+            else if (cur.Text == "class")
+                ReadClass(access);
+            else if (cur.Text == "enum")
+                ReadEnum(access);
+            else
+                throw Abort("not supported");
+        }
+
+        private void ReadEnum(string access)
+        {
+            MoveNext();
+            string name = cur.Text;
+            MoveNext();
+            Debug.WriteLine();
+            Debug.Write("type ");
+            if (access == "private") Debug.Write("private ");
+            Debug.WriteLine("{0} =", name);
+            if (cur.Text != "{") throw Abort("must be '{'");
+            MoveNext();
+            int v = 0;
+            while (cur != null && cur.Text != "}")
+            {
+                var id = cur.Text;
+                MoveNext();
+                if (cur.Text == "=")
                 {
-                    var acc = cur.Text;
                     MoveNext();
-                    if (cur.Text != "class")
-                        throw Abort("class required");
-                    ReadClass(acc);
+                    v = int.Parse(cur.Text);
+                    MoveNext();
                 }
-                else if (cur.Text == "class")
-                    ReadClass("private");
+                Debug.WriteLine("    | {0} = {1}", id, v);
+                v = v + 1;
+                if (cur.Text == ",") MoveNext();
             }
             MoveNext();
         }
@@ -103,7 +137,7 @@ namespace CSharpParser
             {
                 throw Abort("inherit not supported");
             }
-            while (cur.Text != "{") MoveNext();
+            if (cur.Text != "{") throw Abort("must be '{'");
             MoveNext();
             while (cur != null && cur.Text != "}")
                 ReadMember("private", false);
